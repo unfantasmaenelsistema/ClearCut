@@ -1,57 +1,21 @@
-# Guía de Contribución a ClearCut AI 🚀
+# Cómo colaborar con ClearCut
 
-¡Gracias por tu interés en colaborar con **ClearCut AI**! Este proyecto es de código abierto y agradecemos sugerencias, reportes de problemas y nuevas funciones.
-
----
-
-## 🛠️ Entorno de Desarrollo Local
-
-### Requisitos previos
-- **Node.js** v18 o v20+
-- **npm** v9+ (o `pnpm` / `bun`)
-
-### Pasos para iniciar
-
-1. Haz un fork del repositorio en GitHub.
-2. Clona tu fork localmente:
-   ```bash
-   git clone https://github.com/TU-USUARIO/clearcut-ai.git
-   cd clearcut-ai
-   ```
-3. Instala las dependencias:
-   ```bash
-   npm install
-   ```
-4. Inicia el servidor de desarrollo en caliente:
-   ```bash
-   npm run dev
-   ```
-5. Abre en tu navegador en `http://localhost:3000`.
-
----
-
-## 🧪 Comprobación de Calidad y Compilación
-
-Antes de enviar un Pull Request, ejecuta las comprobaciones de TypeScript y construcción:
+Gracias por echar una mano. Antes de abrir un PR:
 
 ```bash
-# Validar tipos TypeScript
-npm run lint
-
-# Probar la compilación para producción
-npm run build
+npm ci
+npm test        # pruebas del núcleo (src/core.js)
+npm run build   # la build tiene que salir sin errores
+npm run dev     # pruébalo en http://localhost:5180 con fotos reales
 ```
 
----
+## Reglas del proyecto
 
-## 💡 Guías de Código
+- **Las imágenes no salen del navegador.** No añadas nada que las suba a un servidor, ni analítica, ni recursos de terceros (fuentes, CDN). La única conexión externa permitida es la descarga del modelo desde `staticimgly.com`; la CSP de `vite.config.js` lo hace cumplir.
+- **Nada de `innerHTML` con datos del usuario** (nombres de archivo incluidos): usa el helper `el()` de `src/app.js`.
+- La lógica que no necesita DOM va en `src/core.js` con su prueba en `tests/core.test.js`.
+- Textos de la interfaz en español.
 
-- **100% Client-Side:** No introduzcas dependencias que requieran servidores backend o claves de API remotas para procesar imágenes. La privacidad total en el cliente es la filosofía central de la app.
-- **Rendimiento:** Las transformaciones pesadas de imágenes deben utilizar Canvas de alto rendimiento o Web Workers para no congelar el hilo principal.
-- **Estilos:** Mantener la estética limpia en temas Claro y Oscuro con Tailwind CSS y variables CSS semánticas.
+## Licencia
 
----
-
-## 📄 Licencia
-
-Al contribuir con este repositorio, aceptas que tus contribuciones se licencien bajo la [Licencia MIT](./LICENSE).
+Tus contribuciones se publican con la licencia [MIT](LICENSE) del repositorio. Ten en cuenta que la app publicada incluye `@imgly/background-removal` (AGPL-3.0); el README lo explica.

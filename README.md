@@ -1,292 +1,135 @@
-<div align="center">
-
-# ✂️ ClearCut AI
-
-### Eliminación Inteligente de Fondos por Lotes con WebAssembly e IA en el Navegador
-
-**100% Privado • Sin Servidores • Sin Claves de API • Aceleración Local con ONNX Runtime**
-
-[![GitHub Pages](https://img.shields.io/badge/Deploy-GitHub_Pages-22c55e?style=for-the-badge&logo=github)](https://pages.github.com/)
-[![WebAssembly](https://img.shields.io/badge/WASM-In--Browser_AI-6366f1?style=for-the-badge&logo=webassembly)](https://webassembly.org/)
-[![License: MIT](https://img.shields.io/badge/Licencia-MIT-8b5cf6?style=for-the-badge)](./LICENSE)
-[![Vite](https://img.shields.io/badge/Built_with-Vite-ffb703?style=for-the-badge&logo=vite)](https://vitejs.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-3178c6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
-[![Privacy: 100% Local](https://img.shields.io/badge/Privacidad-100%25_Cliente-06b6d4?style=for-the-badge&logo=shield)](https://github.com/)
-
-<br />
-
-<!-- Hero Preview Screenshot -->
 <p align="center">
-  <img src="./docs/screenshots/hero-preview.svg" alt="ClearCut AI - Vista Principal de Edición y Comparación" width="100%" />
+  <a href="https://www.unfantasmaenelsistema.com"><img src="public/logo.png" width="110" alt="Un fantasma en el sistema"></a>
 </p>
 
-</div>
+<h1 align="center">ClearCut</h1>
 
----
+<p align="center">
+  <b>Quita el fondo de tus imágenes en el navegador, sin subirlas a ningún sitio</b><br>
+  Una foto o un lote entero · Fondos, sombra y borde pegatina · Presets para redes · Descarga en PNG, JPG o ZIP
+</p>
 
-## 📑 Tabla de Contenidos
+<p align="center">
+  <a href="https://unfantasmaenelsistema.github.io/ClearCut/"><b>▶ Abrir ClearCut</b></a> ·
+  <a href="#qué-hace">Qué hace</a> ·
+  <a href="#privacidad-qué-sale-de-tu-equipo">Privacidad</a> ·
+  <a href="#cómo-funciona">Cómo funciona</a> ·
+  <a href="#atajos-de-teclado">Atajos</a> ·
+  <a href="https://www.unfantasmaenelsistema.com">unfantasmaenelsistema.com</a> ·
+  <a href="#créditos-y-licencia">Licencias</a>
+</p>
 
-1. [Visión General](#-visión-general)
-2. [Capturas de Pantalla](#-capturas-de-pantalla)
-3. [Características Principales](#-características-principales)
-4. [Arquitectura y Privacidad](#-arquitectura-y-privacidad)
-5. [Atajos de Teclado](#-atajos-de-teclado)
-6. [Instalación y Ejecución Local](#-instalación-y-ejecución-local)
-7. [Despliegue en GitHub Pages](#-despliegue-en-github-pages)
-8. [Estructura del Proyecto](#-estructura-del-proyecto)
-9. [Preguntas Frecuentes (FAQ)](#-preguntas-frecuentes-faq)
-10. [Licencia](#-licencia)
+<p align="center">
+  <img src="https://img.shields.io/badge/navegador-sin_instalar-10b981?style=flat-square" alt="Sin instalar">
+  <img src="https://img.shields.io/badge/fotos-no_se_suben-06b6d4?style=flat-square" alt="Las fotos no se suben">
+  <img src="https://img.shields.io/badge/IA-ISNet_·_ONNX_Runtime_Web-6366f1?style=flat-square" alt="ISNet en ONNX Runtime Web">
+  <img src="https://img.shields.io/badge/WebGPU-opcional-f59e0b?style=flat-square" alt="WebGPU opcional">
+  <img src="https://img.shields.io/badge/licencia-MIT_·_AGPL--3.0-blue?style=flat-square" alt="MIT y AGPL-3.0">
+</p>
 
----
+<p align="center">
+  <img src="docs/editor.webp" width="900" alt="ClearCut con el comparador antes/después: a la izquierda la ilustración original, a la derecha el personaje recortado sobre fondo transparente">
+</p>
 
-## 🌟 Visión General
+Arrastra una o varias imágenes y ClearCut les quita el fondo con una red neuronal (ISNet) que se ejecuta **dentro de tu navegador**. La primera vez descarga el modelo; a partir de ahí las fotos se procesan en tu equipo, una detrás de otra, y puedes retocar el resultado antes de descargarlo.
 
-**ClearCut AI** es una aplicación web moderna, ultrarrápida y de código abierto diseñada para eliminar el fondo de una o docenas de imágenes en lote de forma automática, directamente en el navegador del usuario utilizando **WebAssembly (WASM)** y redes neuronales profundas (ONNX Runtime).
+> [!NOTE]
+> El recorte es automático y depende de la foto: con un sujeto claro sobre un fondo distinto suele quedar muy bien; con pelo suelto, cristal, humo o texto encima de la imagen puede dejar restos o comerse bordes. Revisa siempre el resultado con el comparador antes de usarlo.
 
-A diferencia de otros servicios convencionales que suben tus fotos a servidores externos o cobran suscripciones por procesamiento en la nube:
+## Qué hace
 
-- 🛡️ **Tus fotos jamás salen de tu equipo:** Cero almacenamiento remoto, cero backend, cero telemetría invasiva.
-- 💸 **Sin costes de API ni límites:** Ejecuta tantas fotos como desees sin gastar cuotas ni pagar por token.
-- ⚡ **Multi-procesamiento en lote:** Sube varias imágenes simultáneamente, supervisa la cola de procesamiento y descarga un archivo `.ZIP` comprimido con un solo clic.
-- 🎨 **Suite de retoque y efectos de estudio:** Fondos de color sólido, gradientes, desenfoque de fondo personalizado, contorno estilo pegatina (*sticker*), sombra suave 3D, filtros de luz (brillo, contraste, saturación) y proporciones predefinidas para Instagram, TikTok, Reels y E-Commerce.
+- **Cola por lotes**: añade varias fotos (arrastrar, seleccionar o pegar con Ctrl+V) y se procesan de una en una para no agotar la memoria. Puedes seguir añadiendo mientras trabaja y **detener la cola**: termina la imagen en curso y deja el resto pendientes; al añadir más, continúa.
+- **Comparador antes/después** con divisor arrastrable, vista solo del recorte, zoom y el botón **Ver original**. El «antes» se gira, voltea y encuadra igual que el resultado, así que siempre comparas lo mismo.
+- **Fondo**: transparente, 10 colores o uno libre, 6 degradados o una imagen tuya con desenfoque. Lo que ves en la vista previa es exactamente lo que se descarga.
+- **Retoque**: brillo, contraste y saturación del recorte; **sombra** (desenfoque, desplazamiento, opacidad y color) y **borde pegatina** (grosor y color). La sombra incluye el borde.
+- **Lienzo**: voltear, girar 90° y presets 1:1, 9:16, 16:9 y 4:5 que dejan margen alrededor del sujeto. **Aplicar a todo el lote** copia los ajustes de la foto activa a las demás.
+- **Exportar**: PNG con transparencia o JPG (si el fondo es transparente se exporta en blanco, y te lo avisa), al 100 %, 75 % o 50 %, con estimación de tamaño. **Copiar** al portapapeles o **descargar todo en ZIP** (los nombres repetidos se numeran en vez de pisarse).
+- **Historial**: las 5 últimas imágenes, a resolución completa, se guardan en este navegador (IndexedDB) para recuperarlas tras recargar. Se puede vaciar o desactivar.
+- **Modelo a elegir**: Rápido (44 MB), Equilibrado (88 MB, por defecto) o Máxima precisión (176 MB), y GPU por WebGPU si el navegador la ofrece, con vuelta automática a la CPU si falla.
+- Tema claro/oscuro, funciona en móvil y no deja cerrar la pestaña por descuido si hay recortes sin descargar.
 
----
+<p align="center">
+  <img src="docs/efectos.webp" width="900" alt="Recorte con borde pegatina blanco, sombra y degradado azul en un lienzo 1:1">
+</p>
 
-## 📸 Capturas de Pantalla
+<p align="center">
+  <img src="docs/lote.webp" width="560" alt="Cola de cuatro imágenes: dos listas, una al 75 % y otra en espera, con la barra de progreso global">
+  &nbsp;
+  <img src="docs/movil.webp" width="200" alt="ClearCut en un móvil">
+</p>
 
-### 1. Vista Principal con Slider Antes / Después
-Permite inspeccionar con precisión milimétrica los bordes recortados mediante un divisor interactivo arrastrable, acompañado de zoom óptico y selector de fondo transparente cuadriculado.
+## Privacidad: qué sale de tu equipo
 
-<div align="center">
-  <img src="./docs/screenshots/hero-preview.svg" alt="Interfaz Principal de ClearCut AI" width="95%" />
-</div>
+| Qué | Adónde | Cuándo |
+| --- | --- | --- |
+| Tus imágenes | **A ningún sitio.** Se leen y procesan en la pestaña. | Nunca |
+| Modelo ISNet y ONNX Runtime (WebAssembly) | Se descargan de `staticimgly.com`, la CDN de IMG.LY | La primera vez (luego quedan en la caché del navegador) |
+| Historial (opcional) | IndexedDB de tu navegador | Al terminar cada imagen, si está activado |
+| Preferencias (tema, modelo, GPU) | `localStorage` de tu navegador | Al cambiarlas |
 
-<br />
+No hay servidor propio, ni analítica, ni cookies. La página publicada lleva una política CSP que solo permite cargar código del propio sitio y conectar con `staticimgly.com`. Puedes comprobarlo en la pestaña *Red* de las herramientas del navegador: al abrir la página no hay ninguna petición externa, y al procesar solo aparecen las del modelo.
 
-### 2. Cola de Procesamiento por Lotes y Descarga Masiva en ZIP
-Procesa múltiples fotos en segundo plano con control de cola secuencial, estado en tiempo real, barras de progreso acumuladas y empaquetado directo en `.zip` vía JSZip.
+## Cómo funciona
 
-<div align="center">
-  <img src="./docs/screenshots/batch-workflow.svg" alt="Procesamiento por Lotes y Cola de Archivos" width="95%" />
-</div>
+1. La imagen se decodifica en el navegador y se reduce a 1024 × 1024 para la red.
+2. [ISNet](https://github.com/xuebinqin/DIS) calcula una máscara de primer plano con [ONNX Runtime Web](https://onnxruntime.ai/) (WebAssembly en la CPU o WebGPU). Esa parte la hace la librería [`@imgly/background-removal`](https://github.com/imgly/background-removal-js).
+3. La máscara se escala al tamaño original y se aplica como canal alfa: el recorte conserva la **resolución completa** de tu foto.
+4. ClearCut compone el resultado en un `<canvas>`: fondo → sombra → borde → recorte, con el giro y el lienzo elegidos.
 
-<br />
+Tiempos medidos en las pruebas (Chromium, CPU, modelo Equilibrado): una ilustración de 2528 × 1696 px tarda unos **11 s**; la primera imagen añade la descarga del modelo. Con WebGPU, cuando está disponible, la inferencia es bastante más rápida.
 
-### 3. Suite de Edición, Efectos Pro y Formatos de Redes Sociales
-Control total sobre el resultado final: ajusta grosor de pegatinas, desenfoque de sombras 3D, proporciones de aspecto (1:1, 9:16, 16:9, 4:5), espejado, rotación y filtros de luminancia.
-
-<div align="center">
-  <img src="./docs/screenshots/editor-controls.svg" alt="Suite de Edición y Efectos de Estudio" width="95%" />
-</div>
-
----
-
-## 🚀 Características Principales
-
-### 🧠 Inteligencia Artificial 100% en el Navegador
-- Impulsado por el modelo de segmentación de alta precisión **RMBG-1.4 (Bria AI)** y **ONNX Runtime Web**.
-- Los pesos del modelo se cargan en caché local del navegador tras la primera ejecución, permitiendo procesar incluso sin conexión a internet.
-- Aceleración por WebAssembly con hilos de **Web Workers** para mantener la interfaz a 60 FPS sin congelamientos.
-
-### 📦 Procesamiento por Lotes y Descarga ZIP
-- Añade múltiples imágenes arrastrando o seleccionando archivos (PNG, JPG, WebP).
-- Barra de progreso general acumulada y estados individuales (*En cola*, *Procesando*, *Completado*).
-- Posibilidad de cancelar el lote en cualquier momento.
-- Botón **"Descargar Lote (.ZIP)"** que comprime todas las imágenes recortadas en el cliente en segundos.
-
-### 🎨 Fondos Personalizados
-- **Transparente puro:** Ideal para diseño gráfico, catálogos y logos (patrón ajedrezado).
-- **Colores Sólidos:** Paleta rápida de 8 colores curados + selector libre RGB / HEX.
-- **Gradientes Profesionales:** Degradados modernos suaves para productos y retratos.
-- **Fondo de Imagen con Desenfoque:** Carga cualquier fotografía de fondo y ajusta el slider de desenfoque (*Gaussian blur*) para lograr un efecto de profundidad de campo cinematográfico.
-
-### ✨ Efectos Pro de Estudio
-- **Borde de Pegatina (*Sticker Outline*):** Genera un contorno blanco o de color alrededor de la figura recortada, perfecto para miniaturas de YouTube, stickers de mensajería y marketing digital.
-- **Sombra Suave 3D (*Drop Shadow*):** Simula oclusión ambiental realista con control de radio de difuminado (*blur*), desplazamiento vertical (Y), opacidad y tinte de color.
-
-### 🎛️ Filtros Fotográficos en Tiempo Real
-- **Brillo (-100% a +100%):** Corrige subexposición o sobreexposición.
-- **Contraste (-100% a +100%):** Acentúa la profundidad y rango dinámico.
-- **Saturación (0% a 200%):** Desde escala de grises artística hasta colores vívidos e intensos.
-
-### 📐 Redes Sociales y Transformaciones
-- **Formatos de Lienzo Predefinidos:**
-  - `Original`: Mantiene las dimensiones exactas de la foto fuente.
-  - `1:1 Cuadrado`: Perfecto para publicaciones de Instagram y fotos de perfil.
-  - `9:16 Vertical`: Diseñado para Instagram Reels, TikTok, YouTube Shorts y Stories.
-  - `16:9 Panorámico`: Optimizado para miniaturas de YouTube y banners web.
-  - `4:5 Retrato`: El formato de mayor visibilidad en el feed móvil de Instagram.
-- **Herramientas de Transformación:**
-  - ⇄ Invertir Horizontal (Efecto espejo).
-  - ⇅ Invertir Vertical.
-  - ↻ Rotar en 90 grados.
-
-### ⚡ Propagación por Lote
-- Con el botón **"Aplicar a todo el lote"**, transfiere al instante el fondo, sombras, filtros y bordes configurados en la foto activa a todas las demás imágenes de la cola de trabajo.
-
-### 💾 Almacenamiento Local (Local History)
-- Guarda automáticamente en `localStorage` las miniaturas de las últimas 5 imágenes procesadas exitosamente. Si cierras o recargas la pestaña, puedes recuperarlas al instante con un solo clic.
-
-### 🌓 Interfaz Profesional & Accesibilidad
-- Selector de tema **Modo Oscuro** (Dark) y **Modo Claro** (Light).
-- Diálogo flotante de atajos de teclado accesible con la tecla `?`.
-- Estimación en tiempo real del tamaño de archivo y resolución antes de descargar.
-- Copiado directo al portapapeles con un clic para pegar en Photoshop, Figma, Canva o Slack.
-
----
-
-## 🏛️ Arquitectura y Privacidad
-
-ClearCut AI fue concebido con el principio fundamental de **Zero-Knowledge Architecture**:
-
-<div align="center">
-  <img src="./docs/screenshots/architecture.svg" alt="Diagrama de Arquitectura de ClearCut AI" width="95%" />
-</div>
-
-<br />
-
-| Capa | Tecnología | Función |
-| :--- | :--- | :--- |
-| **Interfaz & UX** | HTML5, Tailwind CSS, TypeScript | Diseño responsivo, temas, sliders y controles de lienzo |
-| **Pipeline Asíncrono** | Web Workers nativos | Ejecuta cálculos intensivos sin interferir con la fluidez del navegador |
-| **Inferencia de IA** | WebAssembly (WASM) + ONNX Runtime Web | Ejecución de la red neuronal de segmentación de bordes directamente en CPU/GPU local |
-| **Composición Gráfica** | HTML5 Canvas 2D Context | Mezcla de sombras multicapa, sticker outline, filtros CSS y aspect ratios |
-| **Empaquetado** | JSZip (JavaScript Client Engine) | Generación binaria y descarga del archivo ZIP sin llamadas a la red |
-
----
-
-## ⌨️ Atajos de Teclado
+## Atajos de teclado
 
 | Atajo | Acción |
-| :---: | :--- |
-| <kbd>Ctrl</kbd> + <kbd>O</kbd> / <kbd>⌘</kbd> + <kbd>O</kbd> | Abrir selector de archivos o añadir a la cola |
-| <kbd>Ctrl</kbd> + <kbd>S</kbd> / <kbd>⌘</kbd> + <kbd>S</kbd> | Descargar la imagen actual recortada en HD |
-| <kbd>Ctrl</kbd> + <kbd>C</kbd> / <kbd>⌘</kbd> + <kbd>C</kbd> | Copiar la imagen con fondo transparente al portapapeles |
-| <kbd>Ctrl</kbd> + <kbd>Z</kbd> / <kbd>⌘</kbd> + <kbd>Z</kbd> | Restablecer todos los ajustes fotográficos y efectos a sus valores por defecto |
-| <kbd>←</kbd> / <kbd>→</kbd> | Navegar a la imagen anterior / siguiente en la cola de lotes |
-| <kbd>Espacio</kbd> | Alternar entre vista dividida (slider) y vista completa |
-| <kbd>D</kbd> | Alternar tema Claro / Oscuro |
-| <kbd>?</kbd> | Abrir / cerrar la ventana de ayuda de atajos de teclado |
-| <kbd>Esc</kbd> | Cerrar modales abiertos |
+| :---: | --- |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd> o <kbd>D</kbd> | Descargar la foto actual |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>C</kbd> | Copiar la foto al portapapeles (si no hay texto seleccionado) |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>V</kbd> | Pegar imágenes y añadirlas a la cola |
+| <kbd>Espacio</kbd> | Ver original / ver recorte |
+| <kbd>H</kbd> · <kbd>V</kbd> · <kbd>R</kbd> | Voltear horizontal · vertical · girar 90° |
+| <kbd>+</kbd> · <kbd>-</kbd> · <kbd>0</kbd> | Zoom · restablecer |
+| <kbd>←</kbd> · <kbd>→</kbd> | Imagen anterior / siguiente del lote |
+| <kbd>?</kbd> | Ver los atajos |
 
----
+Las letras solo actúan sin Ctrl/⌘, para no robarle al navegador sus atajos (pegar, recargar…).
 
-## 🛠️ Instalación y Ejecución Local
+## Usarlo en local
 
-### Prerrequisitos
-- [Node.js](https://nodejs.org/) (versión 18 o superior recomendada)
-- Un gestor de paquetes como `npm`, `pnpm` o `bun`
-
-### 1. Clonar el repositorio
 ```bash
-git clone https://github.com/TU-USUARIO/clearcut-ai.git
-cd clearcut-ai
+git clone https://github.com/unfantasmaenelsistema/ClearCut.git
+cd ClearCut
+npm ci
+npm run dev       # http://localhost:5180
+npm test          # pruebas del núcleo (node --test)
+npm run build     # genera dist/ para cualquier hosting estático
 ```
 
-### 2. Instalar dependencias
-```bash
-npm install
-```
+Necesitas Node.js 20 o superior. `src/core.js` contiene la lógica sin DOM (geometría del lienzo, degradados, nombres, atajos) y es lo que cubren las pruebas; `src/app.js` es la interfaz y `src/history-db.js` el historial en IndexedDB. Cada cambio en `main` se prueba y se publica en GitHub Pages con `.github/workflows/pages.yml`.
 
-### 3. Iniciar el servidor de desarrollo
-```bash
-npm run dev
-```
-La aplicación estará disponible inmediatamente en `http://localhost:3000`.
+## Cambios
 
-### 4. Compilar para producción
-```bash
-npm run build
-```
-Esto genera una carpeta `/dist` optimizada y lista para alojarse en cualquier servidor estático (GitHub Pages, Vercel, Netlify, Cloudflare Pages, S3).
+**v2.0 (2026-10-24)** — revisión completa al pasar a la organización:
 
----
+- Las muestras de prueba no funcionaban: se generaban como SVG y la app las rechazaba por formato. Ahora se convierten a PNG.
+- <kbd>Ctrl</kbd>+<kbd>V</kbd> volteaba la imagen (y <kbd>Ctrl</kbd>+<kbd>R</kbd> la giraba) además de pegar.
+- El historial guardaba miniaturas de 320 px y al recuperarlas se descargaban a ese tamaño sin avisar. Ahora guarda los originales en IndexedDB.
+- JPG con fondo transparente salía con el fondo negro.
+- En el ZIP, las imágenes con el mismo nombre (todo lo pegado se llama `image.png`) se sobrescribían.
+- El progreso de la segunda imagen en adelante se apuntaba a la primera (imgly conserva el callback de la primera llamada).
+- Si todas fallaban o se detenía la cola sin terminar ninguna, se anunciaba «¡Lote completado!» y quedaba un editor vacío.
+- El «antes» del comparador no seguía el giro ni el lienzo; el degradado radial y los lineales no coincidían con su muestra; el desenfoque aparecía con cualquier fondo aunque solo afecta al de imagen.
+- Los nombres de archivo se insertaban como HTML en la cola, el historial y los avisos.
+- La librería se cargaba de cuatro CDN distintas con versiones mezcladas (una de ellas, 404). Ahora va empaquetada y fijada (`@imgly/background-removal` 1.7.0, ONNX Runtime Web 1.21.0, JSZip 3.10.1) y la página tiene CSP.
+- Se quitaron los restos de la plantilla de AI Studio (React vacío, Gemini, Express, TypeScript sin uso), las capturas inventadas en SVG y un README que hablaba de otro modelo (RMBG-1.4), de 30 MB, de funcionar sin conexión y de atajos que no existían.
+- Nuevo: elegir modelo, WebGPU con vuelta a CPU, navegación con flechas, aviso al cerrar, accesibilidad de teclado y diseño sin desbordes en móvil.
 
-## 🚀 Despliegue en GitHub Pages
+## Créditos y licencia
 
-El proyecto incluye un flujo de trabajo preconfigurado de **GitHub Actions** en `.github/workflows/deploy.yml` para desplegar automáticamente con cada `push` a la rama `main`.
+Hecho por **[Un Fantasma en el Sistema](https://www.unfantasmaenelsistema.com/)**.
 
-### Pasos para activar en tu repositorio:
+- El código de este repositorio es **[MIT](LICENSE)**.
+- La app publicada incluye **[`@imgly/background-removal`](https://github.com/imgly/background-removal-js) de IMG.LY, con licencia [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html)**. Por eso la build que se sirve en GitHub Pages, en su conjunto, se rige por la AGPL-3.0; su código fuente completo es este repositorio, enlazado desde el pie de la propia app.
+- Modelo **ISNet** de *Highly Accurate Dichotomous Image Segmentation* (Qin et al., ECCV 2022), Apache-2.0, en la versión que distribuye IMG.LY.
+- [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (MIT) y [JSZip](https://github.com/Stuk/jszip) (MIT o GPL-3.0).
 
-1. Sube tu código a GitHub:
-   ```bash
-   git init
-   git add .
-   git commit -m "feat: ClearCut AI release inicial"
-   git branch -M main
-   git remote add origin https://github.com/TU-USUARIO/clearcut-ai.git
-   git push -u origin main
-   ```
-
-2. En GitHub, ve a la pestaña **Settings** (Configuración) de tu repositorio.
-3. En el menú lateral izquierdo, haz clic en **Pages**.
-4. En **Build and deployment > Source**, selecciona **GitHub Actions**.
-5. ¡Listo! La acción de compilación se ejecutará automáticamente y tu aplicación estará disponible en minutos en:
-   ```
-   https://TU-USUARIO.github.io/clearcut-ai/
-   ```
-
-*(Nota: Gracias a la configuración `base: './'` en `vite.config.ts`, la aplicación funciona perfectamente tanto en la raíz de un dominio como en subdirectorios de repositorios de GitHub Pages).*
-
----
-
-## 📂 Estructura del Proyecto
-
-```text
-clearcut-ai/
-├── .github/
-│   └── workflows/
-│       ├── deploy.yml            # Despliegue automatizado a GitHub Pages
-│       └── ci.yml                # Comprobación de tipos y build en PRs
-├── docs/
-│   └── screenshots/              # Capturas y diagramas vectoriales para el README
-│       ├── hero-preview.svg      # Vista general del editor
-│       ├── batch-workflow.svg    # Flujo de procesamiento por lotes
-│       ├── editor-controls.svg   # Panel de filtros y efectos pro
-│       └── architecture.svg      # Diagrama de arquitectura client-side
-├── public/                       # Activos estáticos públicos
-│   └── screenshots/              # Capturas disponibles para la app compilada
-├── index.html                    # Aplicación cliente completa con WebAssembly
-├── vite.config.ts                # Configuración de compilación Vite con rutas relativas
-├── tsconfig.json                 # Configuración de TypeScript
-├── package.json                  # Scripts y dependencias
-├── LICENSE                       # Licencia MIT
-├── CONTRIBUTING.md               # Guía para colaboradores
-└── README.md                     # Documentación principal
-```
-
----
-
-## ❓ Preguntas Frecuentes (FAQ)
-
-<details>
-<summary><strong>¿Mis fotos se envían a algún servidor de IA?</strong></summary>
-<p>No. En absoluto. Todo el procesamiento de inteligencia artificial ocurre de forma 100% local en tu dispositivo utilizando WebAssembly y modelos ONNX compilados para el navegador. Puedes desconectar tu conexión a internet después de cargar la aplicación y seguirá funcionando con total normalidad.</p>
-</details>
-
-<details>
-<summary><strong>¿Existe algún límite en la cantidad de fotos que puedo procesar?</strong></summary>
-<p>No hay límites artificiales ni límites de uso. Puedes procesar cientos de fotos por lotes. El único factor determinante es la memoria RAM disponible en tu dispositivo.</p>
-</details>
-
-<details>
-<summary><strong>¿Por qué el primer procesamiento tarda unos segundos más?</strong></summary>
-<p>La primera vez que abres la app, el navegador descarga el modelo de segmentación (~30 MB) y lo almacena en la caché de tu navegador. A partir de la segunda imagen, el modelo ya reside en la memoria local y los recortes se completan en una fracción del tiempo.</p>
-</details>
-
-<details>
-<summary><strong>¿Qué formatos de imagen son compatibles?</strong></summary>
-<p>Soporta formatos estándar como PNG, JPEG/JPG, WebP y BMP. Las imágenes resultantes pueden exportarse con canal alfa transparente en PNG o con fondo en JPEG de alta calidad.</p>
-</details>
-
----
-
-## 📄 Licencia
-
-Este proyecto está bajo la licencia **MIT**. Consulta el archivo [LICENSE](./LICENSE) para más detalles.
-
----
-
-<div align="center">
-  <sub>Desarrollado con ❤️ y WebAssembly para una web más rápida, privada y sin servidores.</sub>
-</div>
+Las capturas usan una ilustración propia de Un Fantasma en el Sistema.
