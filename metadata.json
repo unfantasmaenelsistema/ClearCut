@@ -1,0 +1,6 @@
+{
+  "name": "ClearCut AI",
+  "description": "Eliminación inteligente de fondos con WebAssembly e IA en el navegador. 100% privado, sin servidor y listo para GitHub Pages.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

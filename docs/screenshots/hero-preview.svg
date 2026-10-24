@@ -1,0 +1,313 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="50%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+
+    <!-- Accent Gradient -->
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+
+    <!-- Glow Filter -->
+    <filter id="purpleGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="30" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="shadowFilter" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="20" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="4" dy="16" stdDeviation="14" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+
+    <!-- Checkerboard Pattern for Transparency -->
+    <pattern id="checkerPattern" width="16" height="16" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#1e293b" />
+      <rect width="8" height="8" fill="#334155" />
+      <rect x="8" y="8" width="8" height="8" fill="#334155" />
+    </pattern>
+  </defs>
+
+  <style>
+    .font-base { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .title { font-weight: 800; fill: #ffffff; letter-spacing: -0.5px; }
+    .text-muted { fill: #94a3b8; font-size: 13px; font-weight: 500; }
+    .badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  </style>
+
+  <!-- Background Base with ambient glow -->
+  <rect width="1200" height="675" fill="url(#bgGrad)" />
+  <circle cx="300" cy="150" r="220" fill="#6366f1" opacity="0.12" filter="url(#purpleGlow)" />
+  <circle cx="950" cy="500" r="260" fill="#8b5cf6" opacity="0.10" filter="url(#purpleGlow)" />
+
+  <!-- App Window Container -->
+  <g transform="translate(40, 30)" filter="url(#shadowFilter)">
+    <!-- App Window Frame -->
+    <rect width="1120" height="615" rx="16" fill="#111827" stroke="#1f2937" stroke-width="1.5" />
+
+    <!-- Top Navigation Bar -->
+    <rect width="1120" height="64" rx="16" fill="#151e32" />
+    <rect y="50" width="1120" height="14" fill="#151e32" />
+    <line x1="0" y1="64" x2="1120" y2="64" stroke="#1f2937" stroke-width="1" />
+
+    <!-- Window Controls (Mac Style) -->
+    <circle cx="28" cy="32" r="6" fill="#ef4444" />
+    <circle cx="48" cy="32" r="6" fill="#f59e0b" />
+    <circle cx="68" cy="32" r="6" fill="#10b981" />
+
+    <!-- Brand Logo & Title -->
+    <g transform="translate(100, 20)">
+      <rect width="28" height="28" rx="7" fill="url(#primaryGrad)" />
+      <!-- Scissors / Cut Icon -->
+      <path d="M9 10 L19 18 M9 18 L19 10" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+      <text x="38" y="20" class="font-base title" font-size="18">ClearCut <tspan fill="#818cf8">AI</tspan></text>
+      <!-- Subtitle badge -->
+      <rect x="145" y="4" width="130" height="20" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="155" y="18" class="font-base badge" fill="#38bdf8">100% Navegador</text>
+    </g>
+
+    <!-- Top Header Badges -->
+    <g transform="translate(720, 20)">
+      <!-- WASM Badge -->
+      <rect x="0" y="2" width="125" height="24" rx="12" fill="#1e293b" stroke="#374151" stroke-width="1" />
+      <circle cx="12" cy="14" r="4" fill="#10b981" />
+      <text x="24" y="18" class="font-base" font-size="12" font-weight="600" fill="#e2e8f0">WebAssembly</text>
+
+      <!-- Privacy Badge -->
+      <rect x="135" y="2" width="120" height="24" rx="12" fill="rgba(99,102,241,0.15)" stroke="#6366f1" stroke-width="1" />
+      <text x="150" y="18" class="font-base" font-size="12" font-weight="600" fill="#a5b4fc">🔒 Cero Servidor</text>
+
+      <!-- Keyboard Shortcut Icon Button -->
+      <rect x="265" y="2" width="28" height="24" rx="6" fill="#1f2937" stroke="#374151" stroke-width="1" />
+      <text x="273" y="18" class="font-base" font-size="12" fill="#94a3b8">⌨</text>
+
+      <!-- Theme Switcher -->
+      <rect x="300" y="2" width="28" height="24" rx="6" fill="#1f2937" stroke="#374151" stroke-width="1" />
+      <text x="308" y="18" class="font-base" font-size="12" fill="#fbbf24">☀</text>
+    </g>
+
+    <!-- MAIN WORKSPACE LAYOUT -->
+    <!-- Left / Center Canvas Area (Width: 770) -->
+    <g transform="translate(24, 84)">
+      <!-- Canvas Card -->
+      <rect width="750" height="420" rx="12" fill="#0b0f19" stroke="#1e293b" stroke-width="1.5" />
+
+      <!-- Canvas Toolbar (Top Inside) -->
+      <g transform="translate(16, 14)">
+        <rect width="180" height="32" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+        <text x="12" y="21" class="font-base" font-size="12" font-weight="600" fill="#f8fafc">Dividir (Antes/Después)</text>
+        
+        <!-- Zoom Controls -->
+        <g transform="translate(620, 0)">
+          <rect width="90" height="32" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+          <text x="14" y="21" class="font-base" font-size="12" fill="#94a3b8">🔍 100%</text>
+        </g>
+      </g>
+
+      <!-- Interactive Comparison Canvas Preview -->
+      <g transform="translate(45, 60)" filter="url(#softShadow)">
+        <!-- Canvas Frame -->
+        <rect width="660" height="330" rx="8" fill="#020617" />
+        
+        <!-- Left Side: Original Background (Scenic warm gradient sunset) -->
+        <g clip-path="url(#leftHalfClip)">
+          <clipPath id="leftHalfClip">
+            <rect width="330" height="330" rx="8" />
+          </clipPath>
+          <linearGradient id="sunsetGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#f59e0b" />
+            <stop offset="50%" stop-color="#ec4899" />
+            <stop offset="100%" stop-color="#3b82f6" />
+          </linearGradient>
+          <rect width="660" height="330" fill="url(#sunsetGrad)" opacity="0.85" />
+          <!-- Abstract nature elements in original -->
+          <circle cx="120" cy="100" r="45" fill="#fef08a" opacity="0.9" />
+          <path d="M0,260 Q120,180 280,240 T660,200 L660,330 L0,330 Z" fill="#312e81" opacity="0.7" />
+        </g>
+
+        <!-- Right Side: Removed Background with Checkerboard Pattern -->
+        <g clip-path="url(#rightHalfClip)">
+          <clipPath id="rightHalfClip">
+            <rect x="330" y="0" width="330" height="330" rx="8" />
+          </clipPath>
+          <rect width="660" height="330" fill="url(#checkerPattern)" />
+        </g>
+
+        <!-- Subject Cutout (Person silhouette with stylish gradient & sunglasses) -->
+        <g transform="translate(230, 40)">
+          <!-- Sticker Outline Glow (Right half effect) -->
+          <path d="M100 40 C75 40 55 60 55 90 C55 110 65 125 75 135 C50 150 20 185 20 230 L180 230 C180 185 150 150 125 135 C135 125 145 110 145 90 C145 60 125 40 100 40 Z" 
+                fill="none" stroke="#ffffff" stroke-width="8" stroke-linejoin="round" opacity="0.95" />
+          <!-- Person Body -->
+          <path d="M100 40 C75 40 55 60 55 90 C55 110 65 125 75 135 C50 150 20 185 20 230 L180 230 C180 185 150 150 125 135 C135 125 145 110 145 90 C145 60 125 40 100 40 Z" 
+                fill="#4338ca" />
+          <!-- Face details / highlights -->
+          <ellipse cx="100" cy="95" rx="30" ry="38" fill="#fbcfe8" />
+          <path d="M80 85 Q100 80 120 85 Q115 105 100 105 Q85 105 80 85 Z" fill="#0f172a" />
+          <circle cx="100" cy="55" r="32" fill="#1e1b4b" />
+          <path d="M50 190 Q100 160 150 190 L165 240 L35 240 Z" fill="#6366f1" />
+        </g>
+
+        <!-- Comparison Slider Divider Bar -->
+        <line x1="330" y1="0" x2="330" y2="330" stroke="#ffffff" stroke-width="3" />
+        <!-- Divider Thumb Handle -->
+        <circle cx="330" cy="165" r="18" fill="#ffffff" filter="url(#shadowFilter)" />
+        <path d="M324 165 L328 161 M324 165 L328 169 M336 165 L332 161 M336 165 L332 169" stroke="#4338ca" stroke-width="2.5" stroke-linecap="round" />
+
+        <!-- Labels on Canvas -->
+        <rect x="16" y="16" width="90" height="26" rx="6" fill="rgba(15,23,42,0.75)" />
+        <text x="28" y="34" class="font-base" font-size="12" font-weight="700" fill="#ffffff">ORIGINAL</text>
+
+        <rect x="535" y="16" width="110" height="26" rx="6" fill="rgba(99,102,241,0.85)" />
+        <text x="547" y="34" class="font-base" font-size="12" font-weight="700" fill="#ffffff">✨ SIN FONDO</text>
+      </g>
+    </g>
+
+    <!-- Bottom Queue & Batch Processing Bar (Width: 750) -->
+    <g transform="translate(24, 518)">
+      <rect width="750" height="82" rx="12" fill="#131b2e" stroke="#1f2937" stroke-width="1" />
+      
+      <!-- Queue Label & Cumulative Status -->
+      <g transform="translate(16, 12)">
+        <text x="0" y="12" class="font-base" font-size="12" font-weight="700" fill="#f8fafc">COLA DE LOTES (4 IMÁGENES)</text>
+        <text x="210" y="12" class="font-base" font-size="11" font-weight="600" fill="#10b981">✓ 100% Completado (4/4)</text>
+
+        <!-- Cumulative Progress Bar -->
+        <rect x="0" y="20" width="310" height="6" rx="3" fill="#1e293b" />
+        <rect x="0" y="20" width="310" height="6" rx="3" fill="#10b981" />
+      </g>
+
+      <!-- Thumbnails Carousel -->
+      <g transform="translate(345, 12)">
+        <!-- Thumb 1 (Active) -->
+        <rect x="0" y="0" width="56" height="56" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="2" />
+        <circle cx="28" cy="24" r="14" fill="#a5b4fc" />
+        <circle cx="48" cy="10" r="7" fill="#10b981" />
+        <text x="45" y="13" class="font-base" font-size="9" fill="#ffffff" font-weight="800">✓</text>
+
+        <!-- Thumb 2 -->
+        <rect x="68" y="0" width="56" height="56" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+        <circle cx="96" cy="24" r="14" fill="#f472b6" />
+        <circle cx="116" cy="10" r="7" fill="#10b981" />
+        <text x="113" y="13" class="font-base" font-size="9" fill="#ffffff" font-weight="800">✓</text>
+
+        <!-- Thumb 3 -->
+        <rect x="136" y="0" width="56" height="56" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+        <circle cx="164" cy="24" r="14" fill="#38bdf8" />
+        <circle cx="184" cy="10" r="7" fill="#10b981" />
+        <text x="181" y="13" class="font-base" font-size="9" fill="#ffffff" font-weight="800">✓</text>
+
+        <!-- Thumb 4 (+ Add New) -->
+        <rect x="204" y="0" width="56" height="56" rx="8" fill="rgba(99,102,241,0.1)" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4 3" />
+        <text x="227" y="34" class="font-base" font-size="20" fill="#818cf8" font-weight="400">+</text>
+
+        <!-- ZIP Export Button -->
+        <g transform="translate(275, 10)">
+          <rect width="115" height="38" rx="8" fill="url(#primaryGrad)" />
+          <text x="16" y="24" class="font-base" font-size="12" font-weight="700" fill="#ffffff">📦 Bajar ZIP</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- Right Sidebar Controls (Width: 300) -->
+    <g transform="translate(790, 84)">
+      <!-- Sidebar Card -->
+      <rect width="305" height="516" rx="12" fill="#151e32" stroke="#1f2937" stroke-width="1.5" />
+
+      <!-- Sidebar Header -->
+      <g transform="translate(18, 20)">
+        <text x="0" y="14" class="font-base" font-size="15" font-weight="700" fill="#ffffff">Personalizar &amp; Efectos</text>
+        <line x1="0" y1="28" x2="270" y2="28" stroke="#1f2937" stroke-width="1" />
+      </g>
+
+      <!-- Section 1: Background Presets -->
+      <g transform="translate(18, 64)">
+        <text x="0" y="10" class="font-base" font-size="12" font-weight="600" fill="#94a3b8">FONDO</text>
+        
+        <!-- Swatches -->
+        <rect x="0" y="20" width="34" height="34" rx="8" fill="url(#checkerPattern)" stroke="#6366f1" stroke-width="2" />
+        <rect x="42" y="20" width="34" height="34" rx="8" fill="#ffffff" stroke="#334155" stroke-width="1" />
+        <rect x="84" y="20" width="34" height="34" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1" />
+        <rect x="126" y="20" width="34" height="34" rx="8" fill="#3b82f6" stroke="#334155" stroke-width="1" />
+        <rect x="168" y="20" width="34" height="34" rx="8" fill="#ec4899" stroke="#334155" stroke-width="1" />
+        <rect x="210" y="20" width="34" height="34" rx="8" fill="#10b981" stroke="#334155" stroke-width="1" />
+      </g>
+
+      <!-- Section 2: Pro Effects (Sticker + Drop Shadow) -->
+      <g transform="translate(18, 140)">
+        <text x="0" y="10" class="font-base" font-size="12" font-weight="600" fill="#94a3b8">EFECTOS PRO</text>
+
+        <!-- Sticker Toggle -->
+        <g transform="translate(0, 20)">
+          <rect width="270" height="36" rx="8" fill="#1e293b" />
+          <text x="12" y="23" class="font-base" font-size="12" fill="#e2e8f0">Borde Pegatina (Sticker)</text>
+          <!-- Active Toggle Pill -->
+          <rect x="215" y="8" width="42" height="20" rx="10" fill="#6366f1" />
+          <circle cx="245" cy="18" r="7" fill="#ffffff" />
+        </g>
+
+        <!-- Soft 3D Shadow Slider -->
+        <g transform="translate(0, 68)">
+          <text x="0" y="12" class="font-base" font-size="11" fill="#cbd5e1">Sombra Suave 3D</text>
+          <text x="245" y="12" class="font-base" font-size="11" fill="#818cf8">45%</text>
+          <!-- Slider Track -->
+          <rect x="0" y="20" width="270" height="6" rx="3" fill="#334155" />
+          <rect x="0" y="20" width="120" height="6" rx="3" fill="#6366f1" />
+          <circle cx="120" cy="23" r="8" fill="#ffffff" filter="url(#shadowFilter)" />
+        </g>
+      </g>
+
+      <!-- Section 3: Photo Adjustments -->
+      <g transform="translate(18, 260)">
+        <text x="0" y="10" class="font-base" font-size="12" font-weight="600" fill="#94a3b8">AJUSTES DE IMAGEN</text>
+
+        <!-- Brightness Slider -->
+        <g transform="translate(0, 22)">
+          <text x="0" y="10" class="font-base" font-size="11" fill="#cbd5e1">Brillo</text>
+          <text x="245" y="10" class="font-base" font-size="11" fill="#818cf8">+5%</text>
+          <rect x="0" y="16" width="270" height="5" rx="2.5" fill="#334155" />
+          <rect x="0" y="16" width="145" height="5" rx="2.5" fill="#6366f1" />
+          <circle cx="145" cy="18.5" r="7" fill="#ffffff" />
+        </g>
+
+        <!-- Contrast Slider -->
+        <g transform="translate(0, 56)">
+          <text x="0" y="10" class="font-base" font-size="11" fill="#cbd5e1">Contraste</text>
+          <text x="245" y="10" class="font-base" font-size="11" fill="#818cf8">+12%</text>
+          <rect x="0" y="16" width="270" height="5" rx="2.5" fill="#334155" />
+          <rect x="0" y="16" width="165" height="5" rx="2.5" fill="#6366f1" />
+          <circle cx="165" cy="18.5" r="7" fill="#ffffff" />
+        </g>
+
+        <!-- Saturation Slider -->
+        <g transform="translate(0, 90)">
+          <text x="0" y="10" class="font-base" font-size="11" fill="#cbd5e1">Saturación</text>
+          <text x="245" y="10" class="font-base" font-size="11" fill="#818cf8">100%</text>
+          <rect x="0" y="16" width="270" height="5" rx="2.5" fill="#334155" />
+          <rect x="0" y="16" width="135" height="5" rx="2.5" fill="#6366f1" />
+          <circle cx="135" cy="18.5" r="7" fill="#ffffff" />
+        </g>
+      </g>
+
+      <!-- Section 4: Export Buttons -->
+      <g transform="translate(18, 395)">
+        <line x1="0" y1="0" x2="270" y2="0" stroke="#1f2937" stroke-width="1" />
+        
+        <!-- Batch Apply Button -->
+        <rect x="0" y="14" width="270" height="34" rx="8" fill="#1e293b" stroke="#374151" stroke-width="1" />
+        <text x="65" y="36" class="font-base" font-size="12" font-weight="600" fill="#cbd5e1">⚡ Aplicar a Todo el Lote</text>
+
+        <!-- Export Main Button -->
+        <rect x="0" y="58" width="270" height="42" rx="10" fill="url(#primaryGrad)" />
+        <text x="75" y="84" class="font-base" font-size="13" font-weight="700" fill="#ffffff">💾 Descargar PNG (HD)</text>
+      </g>
+    </g>
+  </g>
+</svg>

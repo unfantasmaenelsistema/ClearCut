@@ -1,0 +1,4704 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClearCut AI — Eliminador de Fondos por Lotes con WebAssembly e IA Local</title>
+  <meta name="description" content="Elimina el fondo de una o múltiples imágenes por lotes 100% en tu navegador usando WebAssembly y modelos ONNX locales. Cola de procesamiento secuencial, sin servidores, privado y seguro." />
+  <meta property="og:title" content="ClearCut AI — Eliminación de Fondos por Lotes en el Cliente" />
+  <meta property="og:description" content="Procesamiento en cola con barra de progreso acumulada y descarga en ZIP. 100% privado y sin servidores." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="/assets/aistudio/icono_81a3db5b.png" type="image/png" />
+
+  <!-- Script de standalone bundle de @imgly/background-removal (vía CDN jsDelivr) -->
+  <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.7/dist/bundle.js" onerror="window.__imglyBundleError=true"></script>
+  <!-- JSZip para exportación por lotes en archivo comprimido ZIP sin backend -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <style>
+    :root {
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      --bg-main: #0b0f19;
+      --bg-card: #111827;
+      --bg-card-subtle: #1f2937;
+      --bg-input: #1e293b;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: #6366f1;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-subtle: #64748b;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --primary-light: rgba(99, 102, 241, 0.15);
+      --accent: #8b5cf6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+      --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.35);
+      --checker-c1: #1e293b;
+      --checker-c2: #0f172a;
+    }
+
+    html.light {
+      --bg-main: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-card-subtle: #f1f5f9;
+      --bg-input: #f8fafc;
+      --border-color: rgba(0, 0, 0, 0.08);
+      --border-focus: #4f46e5;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --text-subtle: #94a3b8;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-light: rgba(79, 70, 229, 0.1);
+      --accent: #7c3aed;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07);
+      --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.08);
+      --shadow-glow: 0 0 25px rgba(79, 70, 229, 0.2);
+      --checker-c1: #e2e8f0;
+      --checker-c2: #f8fafc;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      line-height: 1.5;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    /* Patrón de transparencia checkerboard */
+    .checkerboard-bg {
+      background-color: var(--checker-c1);
+      background-image: 
+        linear-gradient(45deg, var(--checker-c2) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--checker-c2) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--checker-c2) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--checker-c2) 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+    }
+
+    /* Contenedor principal */
+    .app-container {
+      max-width: 1260px;
+      margin: 0 auto;
+      padding: 1.25rem 1rem 3rem 1rem;
+      width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Barra de Navegación */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 0 1.25rem 0;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 1.75rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .brand-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .brand-tag {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 9999px;
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .badge-pill.active {
+      color: var(--success);
+      border-color: rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.1);
+    }
+
+    .badge-pill.batch-badge {
+      color: var(--accent);
+      border-color: rgba(139, 92, 246, 0.3);
+      background: rgba(139, 92, 246, 0.1);
+      font-weight: 600;
+    }
+
+    .btn-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-icon:hover {
+      color: var(--text-main);
+      border-color: var(--primary);
+      background: var(--bg-card-subtle);
+    }
+
+    /* Hero / Dropzone Section */
+    .hero-section {
+      text-align: center;
+      max-width: 760px;
+      margin: 0 auto 2.25rem auto;
+    }
+
+    .hero-title {
+      font-size: 2.4rem;
+      line-height: 1.2;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, #ffffff 40%, var(--text-muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    html.light .hero-title {
+      background: linear-gradient(135deg, #0f172a 40%, #475569 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* Feature highlights */
+    .feature-tags {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-bottom: 2rem;
+    }
+
+    .feature-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+    }
+
+    .feature-tag svg {
+      color: var(--primary);
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Dropzone */
+    .dropzone-container {
+      max-width: 760px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .dropzone {
+      position: relative;
+      border: 2px dashed rgba(99, 102, 241, 0.35);
+      border-radius: var(--radius-xl);
+      background: var(--bg-card);
+      padding: 3.5rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .dropzone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-2px);
+    }
+
+    .dropzone:hover::before, .dropzone.dragover::before {
+      opacity: 1;
+    }
+
+    .dropzone.dragover {
+      background: rgba(99, 102, 241, 0.04);
+      border-style: solid;
+    }
+
+    .dropzone-icon-wrap {
+      width: 72px;
+      height: 72px;
+      border-radius: var(--radius-xl);
+      background: var(--primary-light);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+      margin-bottom: 1.25rem;
+      transition: transform 0.2s ease;
+    }
+
+    .dropzone:hover .dropzone-icon-wrap {
+      transform: scale(1.08);
+    }
+
+    .dropzone-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .dropzone-desc {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .dropzone-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: white;
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: var(--radius-md);
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .dropzone-btn:hover {
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+      transform: translateY(-1px);
+    }
+
+    .dropzone-hint {
+      margin-top: 1.25rem;
+      font-size: 0.82rem;
+      color: var(--text-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .kbd-shortcut {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      font-size: 0.7rem;
+      font-family: monospace;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+    }
+
+    /* Ejemplos de prueba rápida */
+    .sample-images-bar {
+      margin-top: 2rem;
+      text-align: center;
+    }
+
+    .sample-images-title {
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-subtle);
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+
+    .samples-grid {
+      display: flex;
+      justify-content: center;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+    }
+
+    .sample-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.85rem 0.4rem 0.4rem;
+      border-radius: var(--radius-lg);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .sample-btn:hover {
+      border-color: var(--primary);
+      color: var(--text-main);
+      transform: translateY(-1px);
+    }
+
+    .sample-thumb {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-md);
+      object-fit: cover;
+      background: var(--bg-card-subtle);
+    }
+
+    /* Historial Local (Últimas 5 imágenes) */
+    .history-bar {
+      margin-top: 2rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      padding: 1.25rem 1.5rem;
+      box-shadow: var(--shadow-md);
+      text-align: left;
+      transition: all 0.3s ease;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.85rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .history-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .history-title svg {
+      color: var(--primary);
+    }
+
+    .history-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .history-card {
+      position: relative;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 0.6rem 0.5rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .history-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+    }
+
+    .history-card-thumb-wrap {
+      width: 68px;
+      height: 68px;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      margin-bottom: 0.45rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .history-card-thumb {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .history-card-name {
+      font-size: 0.72rem;
+      font-weight: 600;
+      max-width: 110px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-main);
+    }
+
+    .history-card-meta {
+      font-size: 0.65rem;
+      color: var(--text-subtle);
+      margin-top: 0.15rem;
+      font-family: monospace;
+    }
+
+    .history-card-del {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.85);
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .history-card:hover .history-card-del {
+      opacity: 1;
+    }
+
+    .history-card-del:hover {
+      background: var(--danger);
+      color: white;
+      border-color: var(--danger);
+      transform: scale(1.1);
+    }
+
+    /* ESTADO DE PROGRESO DE COLA POR LOTES */
+    .batch-progress-card {
+      display: none;
+      max-width: 760px;
+      margin: 1.5rem auto;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      padding: 2rem;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .batch-progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .batch-progress-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .batch-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(99, 102, 241, 0.2);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .batch-progress-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    .batch-progress-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Barra Acumulada Principal */
+    .cumulative-bar-block {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .cumulative-bar-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.6rem;
+    }
+
+    .cumulative-bar-track {
+      width: 100%;
+      height: 12px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 9999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .cumulative-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--primary), var(--accent), var(--success));
+      border-radius: 9999px;
+      transition: width 0.25s ease;
+      position: relative;
+    }
+
+    .cumulative-bar-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    /* Barra de la Imagen Actual en el lote */
+    .current-item-bar-block {
+      margin-top: 0.75rem;
+    }
+
+    .current-item-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .current-item-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+
+    .current-item-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--primary);
+      border-radius: 9999px;
+      transition: width 0.2s ease;
+    }
+
+    /* Lista interactiva de imágenes en cola */
+    .queue-preview-list {
+      margin-top: 1.25rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 0.75rem;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
+
+    .queue-preview-item {
+      position: relative;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .queue-preview-item.active {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--primary);
+    }
+
+    .queue-item-thumb {
+      width: 60px;
+      height: 60px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+      margin-bottom: 0.4rem;
+      background: #000;
+    }
+
+    .queue-item-name {
+      font-size: 0.72rem;
+      font-weight: 600;
+      max-width: 110px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-main);
+    }
+
+    .queue-item-status-pill {
+      margin-top: 0.25rem;
+      font-size: 0.65rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .status-pending { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+    .status-processing { background: rgba(99, 102, 241, 0.2); color: var(--primary); }
+    .status-done { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .status-error { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+    /* Barra Superior de la Cola en el Editor */
+    .editor-queue-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      box-shadow: var(--shadow-md);
+      margin-bottom: 1.25rem;
+    }
+
+    .queue-strip-scroll {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      overflow-x: auto;
+      padding: 0.25rem 0;
+      flex: 1;
+      max-width: 100%;
+    }
+
+    .queue-strip-item {
+      position: relative;
+      flex-shrink: 0;
+      width: 54px;
+      height: 54px;
+      border-radius: var(--radius-md);
+      border: 2px solid transparent;
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--bg-card-subtle);
+      transition: all 0.2s;
+    }
+
+    .queue-strip-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .queue-strip-item:hover {
+      border-color: rgba(99, 102, 241, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .queue-strip-item.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--primary);
+    }
+
+    .queue-strip-status-dot {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1.5px solid var(--bg-card);
+    }
+
+    .queue-strip-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-shrink: 0;
+    }
+
+    /* Panel de Resultados / Edición */
+    .editor-section {
+      display: none;
+      flex-direction: column;
+      gap: 1.25rem;
+      width: 100%;
+    }
+
+    .editor-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .editor-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .editor-btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 0.9rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .editor-btn-secondary:hover {
+      color: var(--text-main);
+      border-color: var(--primary);
+      background: var(--bg-card-subtle);
+    }
+
+    /* Layout Editor: Canvas + Controles laterales */
+    .editor-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 980px) {
+      .editor-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Visor Interactivo (Canvas / Comparador) */
+    .viewer-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .viewer-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.25rem;
+      background: var(--bg-card-subtle);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .viewer-mode-tabs {
+      display: flex;
+      background: var(--bg-card);
+      padding: 0.2rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      gap: 0.2rem;
+    }
+
+    .viewer-tab-btn {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .viewer-tab-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .viewer-zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .viewer-stage {
+      position: relative;
+      width: 100%;
+      height: 520px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    @media (max-width: 640px) {
+      .viewer-stage {
+        height: 380px;
+      }
+    }
+
+    .comp-image-layer {
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+      pointer-events: none;
+      border-radius: var(--radius-sm);
+    }
+
+    /* Capa de recorte renderizada con el fondo seleccionado */
+    .rendered-preview-wrap {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Imagen original para la vista partida */
+    .original-split-layer {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%);
+      transition: clip-path 0.05s linear;
+      z-index: 5;
+    }
+
+    /* Divisor deslizable */
+    .split-slider-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 2px;
+      background: white;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+      cursor: ew-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+
+    .split-slider-handle {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: white;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+      font-size: 0.9rem;
+      user-select: none;
+      cursor: ew-resize;
+    }
+
+    .split-badge {
+      position: absolute;
+      bottom: 16px;
+      padding: 0.3rem 0.65rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(8px);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      z-index: 12;
+      pointer-events: none;
+    }
+
+    .split-badge.left { left: 16px; }
+    .split-badge.right { right: 16px; }
+
+    /* Panel de Controles y Fondos */
+    .controls-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .control-group-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Tabs de tipo de fondo */
+    .bg-type-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: var(--bg-card-subtle);
+      padding: 0.25rem;
+      border-radius: var(--radius-md);
+      gap: 0.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .bg-type-btn {
+      padding: 0.45rem 0.2rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+
+    .bg-type-btn.active {
+      background: var(--bg-card);
+      color: var(--text-main);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Paleta de colores rápidos */
+    .color-swatches-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .color-swatch-btn {
+      aspect-ratio: 1;
+      border-radius: var(--radius-md);
+      border: 2px solid transparent;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+
+    .color-swatch-btn:hover {
+      transform: scale(1.08);
+    }
+
+    .color-swatch-btn.active {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--primary);
+    }
+
+    .custom-color-picker-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--bg-card-subtle);
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .custom-color-input {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      background: none;
+    }
+
+    .custom-color-input::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    .custom-color-input::-webkit-color-swatch {
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+    }
+
+    .custom-color-hex {
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    /* Cuadrícula de Degradados */
+    .gradient-swatches-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.6rem;
+    }
+
+    .gradient-swatch-btn {
+      height: 44px;
+      border-radius: var(--radius-md);
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+
+    .gradient-swatch-btn:hover {
+      transform: scale(1.05);
+    }
+
+    .gradient-swatch-btn.active {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px var(--primary);
+    }
+
+    /* Subida de Imagen de Fondo personalizada */
+    .custom-bg-dropzone {
+      border: 1px dashed var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1rem;
+      text-align: center;
+      background: var(--bg-card-subtle);
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .custom-bg-dropzone:hover {
+      border-color: var(--primary);
+    }
+
+    .custom-bg-preview {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-card-subtle);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border-color);
+    }
+
+    .custom-bg-thumb {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+    }
+
+    /* Slider de Desenfoque / Blur */
+    .slider-row {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .range-input {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      background: var(--bg-card-subtle);
+      border-radius: 9999px;
+      outline: none;
+    }
+
+    .range-input::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-text-action {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s;
+    }
+
+    .btn-text-action:hover {
+      color: var(--primary);
+      border-color: var(--primary);
+      background: var(--bg-card-subtle);
+    }
+
+    /* Sección de Exportación */
+    .export-box {
+      border-top: 1px solid var(--border-color);
+      padding-top: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .format-pills {
+      display: flex;
+      background: var(--bg-card-subtle);
+      padding: 0.2rem;
+      border-radius: var(--radius-md);
+      gap: 0.2rem;
+    }
+
+    .format-pill-btn {
+      flex: 1;
+      padding: 0.4rem 0;
+      text-align: center;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .format-pill-btn.active {
+      background: var(--bg-card);
+      color: var(--text-main);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-download-primary {
+      width: 100%;
+      padding: 0.85rem 1rem;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: white;
+      font-weight: 700;
+      font-size: 0.95rem;
+      border-radius: var(--radius-md);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .btn-download-primary:hover {
+      box-shadow: 0 6px 22px rgba(99, 102, 241, 0.6);
+      transform: translateY(-1px);
+    }
+
+    .btn-clipboard {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      font-weight: 600;
+      font-size: 0.85rem;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-clipboard:hover {
+      background: var(--bg-card);
+      border-color: var(--primary);
+    }
+
+    .btn-batch-zip {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white;
+      border: none;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn-batch-zip:hover {
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    }
+
+    /* Modal / Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      pointer-events: none;
+    }
+
+    .toast {
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-md);
+      background: #0f172a;
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: var(--shadow-lg);
+      font-size: 0.88rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      animation: toastIn 0.25s ease-out;
+      pointer-events: auto;
+    }
+
+    .toast.success { border-left: 4px solid var(--success); }
+    .toast.error { border-left: 4px solid var(--danger); }
+    .toast.info { border-left: 4px solid var(--primary); }
+
+    @keyframes toastIn {
+      from { transform: translateY(12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* Banner de compatibilidad Wasm */
+    .compat-alert {
+      display: none;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      padding: 1rem 1.5rem;
+      border-radius: var(--radius-lg);
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* Estilos para el Logo y Enlace de Un Fantasma en el Sistema */
+    .brand-logo-img {
+      width: 100%;
+      height: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: contain;
+      display: block;
+      transition: transform 0.25s ease;
+    }
+
+    .brand:hover .brand-logo-img {
+      transform: scale(1.1) rotate(-5deg);
+    }
+
+    .creator-badge-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.35rem 0.85rem 0.35rem 0.4rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 9999px;
+      text-decoration: none;
+      color: var(--text-main);
+      transition: all 0.25s ease;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .creator-badge-link:hover {
+      border-color: var(--primary);
+      background: var(--bg-card-subtle);
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-1px);
+    }
+
+    .creator-badge-logo-wrap {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .creator-badge-logo {
+      width: 24px;
+      height: 24px;
+      aspect-ratio: 1 / 1;
+      object-fit: contain;
+      display: block;
+      transition: transform 0.2s ease;
+    }
+
+    .creator-badge-link:hover .creator-badge-logo {
+      transform: scale(1.15);
+    }
+
+    .creator-badge-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.15;
+      text-align: left;
+    }
+
+    .creator-badge-sub {
+      font-size: 0.65rem;
+      color: var(--text-subtle);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .creator-badge-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    /* Banner del Creador en el Footer */
+    .footer-creator-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      padding: 1.25rem 2rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      max-width: 540px;
+      width: 100%;
+      text-decoration: none;
+      color: var(--text-main);
+      transition: all 0.25s ease;
+      box-shadow: var(--shadow-md);
+    }
+
+    .footer-creator-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-glow);
+      background: var(--bg-card-subtle);
+    }
+
+    .footer-logo-wrapper {
+      width: 68px;
+      height: 68px;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.25s ease;
+    }
+
+    .footer-creator-card:hover .footer-logo-wrapper {
+      transform: scale(1.08) rotate(-4deg);
+      border-color: var(--primary);
+    }
+
+    .footer-logo-img {
+      width: 100%;
+      height: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: contain;
+      display: block;
+    }
+
+    .footer-creator-info {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    .footer-creator-tag {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 0.2rem;
+    }
+
+    .footer-creator-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .footer-creator-url {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: monospace;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: auto;
+      padding-top: 2.5rem;
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--text-subtle);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .footer-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+
+    /* Efectos Pro (Sombra y Contorno Sticker) */
+    .pro-effect-card {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 0.85rem;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .pro-effect-card.active {
+      border-color: rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.05);
+    }
+
+    .pro-effect-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .toggle-switch-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      width: 34px;
+      height: 18px;
+      background-color: rgba(255, 255, 255, 0.15);
+      border-radius: 9999px;
+      position: relative;
+      transition: background-color 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .toggle-slider::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background-color: white;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .toggle-input:checked + .toggle-slider {
+      background-color: var(--primary);
+    }
+
+    .toggle-input:checked + .toggle-slider::after {
+      transform: translateX(16px);
+    }
+
+    .badge-mini {
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.15rem 0.45rem;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+    }
+
+    .badge-mini.active {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+    }
+
+    /* Botones de Transformación */
+    .transform-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      padding: 0.45rem 0.5rem;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .transform-btn:hover {
+      background: var(--bg-card);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .transform-btn.active {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* Aspect Ratio Pills */
+    .aspect-pills {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.25rem;
+      background: var(--bg-card-subtle);
+      padding: 0.2rem;
+      border-radius: var(--radius-md);
+    }
+
+    .aspect-pill-btn {
+      padding: 0.35rem 0.1rem;
+      text-align: center;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .aspect-pill-btn:hover {
+      color: var(--text-main);
+    }
+
+    .aspect-pill-btn.active {
+      background: var(--bg-card);
+      color: var(--primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Scale Pills */
+    .scale-pill-btn {
+      flex: 1;
+      padding: 0.35rem 0;
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .scale-pill-btn.active {
+      background: var(--bg-card);
+      color: var(--text-main);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Caja de Estimación de Salida */
+    .export-estimate-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-card-subtle);
+      border: 1px dashed var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 0.75rem;
+      margin-top: 0.25rem;
+    }
+
+    /* Modal de Atajos de Teclado */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-xl);
+      max-width: 480px;
+      width: 100%;
+      padding: 1.5rem;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .modal-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .shortcut-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .shortcut-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+    }
+
+    .shortcut-key {
+      font-family: monospace;
+      font-size: 0.72rem;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      padding: 0.15rem 0.5rem;
+      border-radius: var(--radius-sm);
+      color: var(--primary);
+      font-weight: 700;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* Utilidades */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Alerta de Compatibilidad Wasm / Workers -->
+  <div class="app-container" style="flex: 0; padding-bottom: 0;">
+    <div id="compatAlert" class="compat-alert">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>
+        <strong>Navegador no compatible:</strong> Tu navegador no soporta WebAssembly o Web Workers necesarios para ejecutar el modelo de IA localmente. Por favor, actualiza a una versión moderna de Chrome, Edge, Firefox o Safari.
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header>
+      <a href="#" class="brand" onclick="location.reload(); return false;">
+        <div class="brand-icon" style="background: rgba(255, 255, 255, 0.08); padding: 3px; overflow: hidden;">
+          <img src="/assets/aistudio/icono_81a3db5b.png" alt="Un Fantasma en el Sistema" class="brand-logo-img" />
+        </div>
+        <div class="brand-title">
+          ClearCut AI
+          <span class="brand-tag">Batch & Single Wasm</span>
+        </div>
+      </a>
+
+      <div class="header-actions">
+        <!-- Enlace a la web del autor -->
+        <a href="https://www.unfantasmaenelsistema.com/" target="_blank" rel="noopener noreferrer" class="creator-badge-link" title="Visitar Un Fantasma en el Sistema (Sitio Web Oficial)">
+          <div class="creator-badge-logo-wrap">
+            <img src="/assets/aistudio/icono_81a3db5b.png" alt="Un Fantasma en el Sistema" class="creator-badge-logo" />
+          </div>
+          <div class="creator-badge-text">
+            <span class="creator-badge-sub">Creado por</span>
+            <span class="creator-badge-name">
+              unfantasmaenelsistema.com
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--primary);"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </span>
+          </div>
+        </a>
+
+        <span class="badge-pill active" title="Tus imágenes no viajan a ningún servidor">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          100% Privado
+        </span>
+        <button id="themeToggleBtn" class="btn-icon" title="Alternar tema oscuro/claro" aria-label="Cambiar tema">
+          <svg id="themeIconSun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <svg id="themeIconMoon" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ZONA INICIAL (DROPZONE Y HERO) -->
+    <section id="uploadSection">
+      <div class="hero-section">
+        <h1 class="hero-title">Elimina el fondo de una o múltiples imágenes con IA local</h1>
+        <p class="hero-subtitle">Procesa fotos individuales o lotes completos en cola secuencial. Sin servidores, sin límites de uso y con exportación masiva en ZIP.</p>
+        
+        <div class="feature-tags">
+          <div class="feature-tag">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 6 4 14H4L8 6"/><path d="M12 2v4"/><path d="m8 10 4 4 4-4"/></svg>
+            Cola por Lotes Secuencial
+          </div>
+          <div class="feature-tag">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Inferencia Wasm SIMD
+          </div>
+          <div class="feature-tag">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            Progreso Acumulado en Vivo
+          </div>
+          <div class="feature-tag">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+            Descarga Individual o en ZIP
+          </div>
+        </div>
+      </div>
+
+      <!-- Dropzone Principal con soporte Multiple -->
+      <div class="dropzone-container">
+        <div id="dropzone" class="dropzone" role="button" tabindex="0">
+          <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,image/avif" multiple style="display:none;" />
+          
+          <div class="dropzone-icon-wrap">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          
+          <h2 class="dropzone-title">Arrastra y suelta una o varias imágenes aquí</h2>
+          <p class="dropzone-desc">Puedes seleccionar varias fotos a la vez para procesar toda la cola automáticamente</p>
+          
+          <button type="button" id="browseBtn" class="dropzone-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+            Seleccionar fotos (1 o varias)
+          </button>
+          
+          <div class="dropzone-hint">
+            o añade desde el portapapeles con <span class="kbd-shortcut">Ctrl + V</span> / <span class="kbd-shortcut">Cmd + V</span>
+          </div>
+        </div>
+
+        <!-- Ejemplos rápidos de prueba con 1 click -->
+        <div class="sample-images-bar">
+          <div class="sample-images-title">¿Quieres probar rápido? Muestras interactivas:</div>
+          <div class="samples-grid">
+            <button class="sample-btn" data-sample="ghost" style="border-color: rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.1); color: var(--text-main); font-weight: 600;" title="Probar recorte con el logo de Un Fantasma en el Sistema">
+              <img src="/assets/aistudio/icono_81a3db5b.png" class="sample-thumb" style="object-fit: contain; background: #ffffff; padding: 2px;" alt="Fantasma" />
+              Logo Fantasma
+            </button>
+            <button class="sample-btn" data-sample="portrait">
+              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%236366f1'/><circle cx='50' cy='40' r='20' fill='%23ffedd5'/><path d='M25 85 C25 60 75 60 75 85 Z' fill='%231e293b'/></svg>" class="sample-thumb" alt="Retrato" />
+              Retrato / Persona
+            </button>
+            <button class="sample-btn" data-sample="product">
+              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2310b981'/><rect x='30' y='30' width='40' height='45' rx='6' fill='%23ffffff'/><circle cx='50' cy='52' r='10' fill='%23f59e0b'/></svg>" class="sample-thumb" alt="Producto" />
+              Producto / Zapato
+            </button>
+            <button class="sample-btn" data-sample="cat">
+              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23ec4899'/><circle cx='50' cy='52' r='22' fill='%23ffffff'/><polygon points='32,36 38,18 48,34' fill='%23ffffff'/><polygon points='68,36 62,18 52,34' fill='%23ffffff'/></svg>" class="sample-thumb" alt="Mascota" />
+              Mascota / Animal
+            </button>
+            <button class="sample-btn" id="sampleBatchBtn" style="border-color: rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.08); color: var(--text-main);">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+              Probar lote (4 fotos)
+            </button>
+          </div>
+        </div>
+
+        <!-- Historial Local (Últimas 5 imágenes guardadas en localStorage) -->
+        <div id="historyBar" class="history-bar hidden">
+          <div class="history-header">
+            <div class="history-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Historial Reciente (Últimas 5 en este navegador)</span>
+            </div>
+            <button type="button" id="clearHistoryBtn" class="btn-text-action" title="Eliminar las imágenes del historial local">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              Limpiar historial
+            </button>
+          </div>
+          <div id="historyGrid" class="history-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ESTADO DE PROCESAMIENTO DE COLA POR LOTES CON PROGRESO ACUMULADO -->
+    <section id="batchProgressSection" class="batch-progress-card">
+      <div class="batch-progress-header">
+        <div class="batch-progress-title-wrap">
+          <div class="batch-spinner"></div>
+          <div>
+            <h3 id="batchProgressMainTitle" class="batch-progress-title">Procesando cola de imágenes...</h3>
+            <p id="batchProgressSubtitle" class="batch-progress-subtitle">Inferencia secuencial para optimizar memoria RAM</p>
+          </div>
+        </div>
+        <button id="cancelQueueBtn" class="editor-btn-secondary" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          Detener cola
+        </button>
+      </div>
+
+      <!-- Barra de Progreso Acumulada -->
+      <div class="cumulative-bar-block">
+        <div class="cumulative-bar-labels">
+          <span id="cumulativeBarTitle">Progreso Acumulado: 0 de 0 completadas</span>
+          <span id="cumulativePercentLabel" style="color: var(--primary);">0%</span>
+        </div>
+        <div class="cumulative-bar-track">
+          <div id="cumulativeBarFill" class="cumulative-bar-fill"></div>
+        </div>
+
+        <!-- Barra secundaria de la imagen actual en procesamiento -->
+        <div class="current-item-bar-block">
+          <div class="current-item-labels">
+            <span id="currentItemName">Cargando modelo neuronal...</span>
+            <span id="currentItemPercent">0%</span>
+          </div>
+          <div class="current-item-track">
+            <div id="currentItemFill" class="current-item-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grid de miniaturas con estado en tiempo real -->
+      <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-subtle); margin-top: 1rem;">
+        Imágenes en la cola de trabajo:
+      </div>
+      <div id="batchQueueGrid" class="queue-preview-list"></div>
+    </section>
+
+    <!-- PANEL DE RESULTADOS / EDITOR INTERACTIVO -->
+    <section id="editorSection" class="editor-section">
+
+      <!-- Tira / Barra de Lote con Miniaturas (Queue Carousel Strip) -->
+      <div id="editorQueueBar" class="editor-queue-bar">
+        <div style="display: flex; align-items: center; gap: 0.75rem; min-width: 140px;">
+          <div>
+            <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-main);">Cola de Imágenes</div>
+            <div id="queueStatsBadge" style="font-size: 0.72rem; color: var(--text-muted);">1 foto procesada</div>
+          </div>
+        </div>
+
+        <!-- Scroll horizontal de miniaturas -->
+        <div id="queueStripScroll" class="queue-strip-scroll"></div>
+
+        <!-- Acciones de lote -->
+        <div class="queue-strip-actions">
+          <button id="batchDownloadZipBtn" class="editor-btn-secondary btn-batch-zip" title="Descargar todas las imágenes procesadas en un archivo comprimido ZIP">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Descargar Todas (ZIP)
+          </button>
+          
+          <button id="addMoreFilesBtn" class="editor-btn-secondary" title="Añadir más fotos a la cola">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            + Añadir más
+          </button>
+          <input type="file" id="addMoreFileInput" accept="image/jpeg,image/png,image/webp,image/avif" multiple style="display:none;" />
+        </div>
+      </div>
+
+      <div class="editor-topbar">
+        <div class="editor-meta">
+          <button id="resetBtn" class="editor-btn-secondary" title="Limpiar y volver a la zona de subida">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+            Nueva tanda / Subir
+          </button>
+          <button id="viewHistoryFromEditorBtn" class="editor-btn-secondary" title="Ver historial de imágenes guardadas en este navegador">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Historial
+          </button>
+          <div id="imgDimensionsBadge" class="badge-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <span id="imgDimensionsText">0 × 0 px</span>
+          </div>
+          <div id="inferenceTimeBadge" class="badge-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="inferenceTimeText">0.0s</span>
+          </div>
+          <div id="currentFileNameBadge" class="badge-pill" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span id="currentFileNameText">imagen.png</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="shortcutsModalBtn" class="editor-btn-secondary" title="Ver atajos de teclado (tecla ?)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6" y2="8"/><line x1="10" y1="8" x2="10" y2="8"/><line x1="14" y1="8" x2="14" y2="8"/><line x1="18" y1="8" x2="18" y2="8"/><line x1="6" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
+            <span>Atajos</span>
+          </button>
+          <button id="quickToggleOriginalBtn" class="editor-btn-secondary" title="Alternar vista rápida original/recorte (Espacio)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Ver Original</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Grid Principal de Edición -->
+      <div class="editor-grid">
+        <!-- Visualizador / Comparador Split View -->
+        <div class="viewer-card">
+          <div class="viewer-toolbar">
+            <div class="viewer-mode-tabs">
+              <button id="tabSplitView" class="viewer-tab-btn active">Comparador Antes/Después</button>
+              <button id="tabFinalOnly" class="viewer-tab-btn">Solo Recorte</button>
+            </div>
+            
+            <div class="viewer-zoom-controls">
+              <button id="zoomOutBtn" class="btn-icon" style="width: 28px; height: 28px;" title="Reducir zoom">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </button>
+              <span id="zoomLabel" style="font-size: 0.75rem; color: var(--text-muted); min-width: 42px; text-align: center;">100%</span>
+              <button id="zoomInBtn" class="btn-icon" style="width: 28px; height: 28px;" title="Aumentar zoom">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </button>
+              <button id="zoomResetBtn" class="btn-icon" style="width: 28px; height: 28px;" title="Restablecer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Escenario de visualización interactiva -->
+          <div id="viewerStage" class="viewer-stage checkerboard-bg">
+            <div id="zoomWrapper" style="transform-origin: center center; transition: transform 0.15s ease-out; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+              
+              <!-- Contenedor del fondo y la imagen recortada -->
+              <div id="renderedPreviewWrap" class="rendered-preview-wrap">
+                <canvas id="previewCanvas" class="comp-image-layer"></canvas>
+              </div>
+
+              <!-- Capa de la Imagen Original (para el Split Slider) -->
+              <div id="originalSplitLayer" class="original-split-layer">
+                <img id="originalSplitImg" class="comp-image-layer" alt="Imagen Original" />
+              </div>
+
+              <!-- Divisor interactivo Split Slider -->
+              <div id="splitSliderLine" class="split-slider-line">
+                <div class="split-slider-handle">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </div>
+
+              <!-- Badges de Antes / Después -->
+              <div id="badgeBefore" class="split-badge left">Antes</div>
+              <div id="badgeAfter" class="split-badge right">Después</div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel Lateral de Herramientas y Exportación -->
+        <div class="controls-card">
+          <!-- Selección de Fondo -->
+          <div>
+            <div class="control-group-title">
+              <span>Fondo de Previsualización</span>
+            </div>
+
+            <!-- Tabs de categorías de fondo -->
+            <div class="bg-type-tabs">
+              <button class="bg-type-btn active" data-bg-type="transparent">Transp.</button>
+              <button class="bg-type-btn" data-bg-type="color">Color</button>
+              <button class="bg-type-btn" data-bg-type="gradient">Degradado</button>
+              <button class="bg-type-btn" data-bg-type="image">Imagen</button>
+            </div>
+
+            <!-- Panel: Transparente -->
+            <div id="bgPanelTransparent" style="font-size: 0.82rem; color: var(--text-muted); padding: 0.5rem 0;">
+              Cuadrícula de transparencia clásica. Mantiene canal alfa puro en descargas individuales y ZIP.
+            </div>
+
+            <!-- Panel: Colores Sólidos -->
+            <div id="bgPanelColor" class="hidden">
+              <div class="color-swatches-grid">
+                <button class="color-swatch-btn active" data-color="#FFFFFF" style="background:#FFFFFF;" title="Blanco Puro"></button>
+                <button class="color-swatch-btn" data-color="#000000" style="background:#000000;" title="Negro Absoluto"></button>
+                <button class="color-swatch-btn" data-color="#E2E8F0" style="background:#E2E8F0;" title="Gris Estudio Claro"></button>
+                <button class="color-swatch-btn" data-color="#64748B" style="background:#64748B;" title="Gris Neutro"></button>
+                <button class="color-swatch-btn" data-color="#0F172A" style="background:#0F172A;" title="Azul Marino Oscuro"></button>
+                <button class="color-swatch-btn" data-color="#004B87" style="background:#004B87;" title="Azul Pasaporte / DNI"></button>
+                <button class="color-swatch-btn" data-color="#2563EB" style="background:#2563EB;" title="Azul Corporativo"></button>
+                <button class="color-swatch-btn" data-color="#DC2626" style="background:#DC2626;" title="Rojo Intenso"></button>
+                <button class="color-swatch-btn" data-color="#10B981" style="background:#10B981;" title="Verde Esmeralda"></button>
+                <button class="color-swatch-btn" data-color="#8B5CF6" style="background:#8B5CF6;" title="Violeta Creativo"></button>
+              </div>
+
+              <div class="custom-color-picker-row">
+                <input type="color" id="customColorPicker" class="custom-color-input" value="#FFFFFF" />
+                <span style="font-size: 0.8rem; color: var(--text-muted);">Color libre:</span>
+                <span id="customColorHex" class="custom-color-hex">#FFFFFF</span>
+              </div>
+            </div>
+
+            <!-- Panel: Degradados -->
+            <div id="bgPanelGradient" class="hidden">
+              <div class="gradient-swatches-grid">
+                <button class="gradient-swatch-btn active" data-gradient="linear-gradient(135deg, #f6d365 0%, #fda085 100%)" style="background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);" title="Sunset Glow"></button>
+                <button class="gradient-swatch-btn" data-gradient="linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);" title="Deep Ocean"></button>
+                <button class="gradient-swatch-btn" data-gradient="linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)" style="background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);" title="Soft Lavender"></button>
+                <button class="gradient-swatch-btn" data-gradient="radial-gradient(circle, #f8fafc 0%, #cbd5e1 100%)" style="background: radial-gradient(circle, #f8fafc 0%, #cbd5e1 100%);" title="Studio Soft"></button>
+                <button class="gradient-swatch-btn" data-gradient="linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)" style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);" title="Midnight Studio"></button>
+                <button class="gradient-swatch-btn" data-gradient="linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)" style="background: linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%);" title="Berry Vibrant"></button>
+              </div>
+            </div>
+
+            <!-- Panel: Imagen Personalizada -->
+            <div id="bgPanelImage" class="hidden">
+              <input type="file" id="customBgFileInput" accept="image/*" style="display:none;" />
+              <div id="customBgDropzone" class="custom-bg-dropzone">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary); margin-bottom:0.35rem;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <div style="font-size:0.82rem; font-weight:600;">Subir imagen de fondo</div>
+                <div style="font-size:0.72rem; color:var(--text-subtle);">JPG, PNG o WEBP</div>
+              </div>
+
+              <div id="customBgPreviewRow" class="custom-bg-preview">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <img id="customBgThumb" class="custom-bg-thumb" alt="Fondo" />
+                  <span style="font-size:0.75rem; color:var(--text-muted); max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Fondo activo</span>
+                </div>
+                <button id="removeCustomBgBtn" class="btn-icon" style="width:26px; height:26px;" title="Quitar fondo">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Desenfoque / Blur de fondo (opcional) -->
+            <div class="slider-row">
+              <div class="slider-header">
+                <span>Desenfoque del Fondo (Efecto Bokeh)</span>
+                <span id="blurVal">0px</span>
+              </div>
+              <input type="range" id="bgBlurInput" class="range-input" min="0" max="25" value="0" />
+            </div>
+          </div>
+
+          <!-- Ajustes de la Imagen Recortada (Brillo, Contraste, Saturación) -->
+          <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
+            <div class="control-group-title" style="margin-bottom: 0.85rem;">
+              <span>Ajustes del Recorte</span>
+              <button type="button" id="resetAdjustmentsBtn" class="btn-text-action" title="Restablecer brillo, contraste y saturación a 100%">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                Restablecer
+              </button>
+            </div>
+
+            <!-- Slider de Brillo -->
+            <div style="margin-bottom: 0.75rem;">
+              <div class="slider-header">
+                <span style="display:flex; align-items:center; gap:0.4rem;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                  Brillo
+                </span>
+                <span id="brightnessVal" style="font-family: monospace; font-size: 0.8rem;">100%</span>
+              </div>
+              <input type="range" id="brightnessInput" class="range-input" min="20" max="200" value="100" />
+            </div>
+
+            <!-- Slider de Contraste -->
+            <div style="margin-bottom: 0.75rem;">
+              <div class="slider-header">
+                <span style="display:flex; align-items:center; gap:0.4rem;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20Z"/></svg>
+                  Contraste
+                </span>
+                <span id="contrastVal" style="font-family: monospace; font-size: 0.8rem;">100%</span>
+              </div>
+              <input type="range" id="contrastInput" class="range-input" min="20" max="200" value="100" />
+            </div>
+
+            <!-- Slider de Saturación -->
+            <div>
+              <div class="slider-header">
+                <span style="display:flex; align-items:center; gap:0.4rem;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                  Saturación
+                </span>
+                <span id="saturationVal" style="font-family: monospace; font-size: 0.8rem;">100%</span>
+              </div>
+              <input type="range" id="saturationInput" class="range-input" min="0" max="200" value="100" />
+            </div>
+          </div>
+
+          <!-- Efectos Visuales Pro (Sombra y Contorno Sticker) -->
+          <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
+            <div class="control-group-title" style="margin-bottom: 0.85rem;">
+              <span style="display:flex; align-items:center; gap:0.4rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                Efectos Pro
+              </span>
+              <button type="button" id="resetEffectsBtn" class="btn-text-action" title="Desactivar sombra y contorno">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                Restablecer
+              </button>
+            </div>
+
+            <!-- Sombra Suave 3D -->
+            <div id="shadowCard" class="pro-effect-card">
+              <div class="pro-effect-header">
+                <label class="toggle-switch-wrap">
+                  <input type="checkbox" id="shadowToggle" class="toggle-input" />
+                  <span class="toggle-slider"></span>
+                  <span style="font-weight:600; font-size:0.8rem;">Sombra Suave 3D</span>
+                </label>
+                <span id="shadowBadge" class="badge-mini">Inactiva</span>
+              </div>
+              <div id="shadowControlsWrap" class="hidden" style="margin-top:0.75rem; display:flex; flex-direction:column; gap:0.6rem;">
+                <div>
+                  <div class="slider-header">
+                    <span>Desenfoque (Blur)</span>
+                    <span id="shadowBlurVal">25px</span>
+                  </div>
+                  <input type="range" id="shadowBlurInput" class="range-input" min="0" max="60" value="25" />
+                </div>
+                <div>
+                  <div class="slider-header">
+                    <span>Desplazamiento Vertical</span>
+                    <span id="shadowOffsetYVal">15px</span>
+                  </div>
+                  <input type="range" id="shadowOffsetYInput" class="range-input" min="-30" max="50" value="15" />
+                </div>
+                <div>
+                  <div class="slider-header">
+                    <span>Opacidad de la sombra</span>
+                    <span id="shadowOpacityVal">35%</span>
+                  </div>
+                  <input type="range" id="shadowOpacityInput" class="range-input" min="5" max="100" value="35" />
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.2rem;">
+                  <span style="font-size:0.75rem; color:var(--text-muted);">Tono de sombra:</span>
+                  <div style="display:flex; align-items:center; gap:0.4rem;">
+                    <input type="color" id="shadowColorPicker" class="custom-color-input" style="width:24px; height:24px;" value="#000000" />
+                    <span id="shadowColorHex" style="font-family:monospace; font-size:0.75rem;">#000000</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Borde Pegatina / Sticker Die-cut -->
+            <div id="stickerCard" class="pro-effect-card" style="margin-top:0.75rem;">
+              <div class="pro-effect-header">
+                <label class="toggle-switch-wrap">
+                  <input type="checkbox" id="stickerToggle" class="toggle-input" />
+                  <span class="toggle-slider"></span>
+                  <span style="font-weight:600; font-size:0.8rem;">Borde Pegatina (Sticker)</span>
+                </label>
+                <span id="stickerBadge" class="badge-mini">Inactivo</span>
+              </div>
+              <div id="stickerControlsWrap" class="hidden" style="margin-top:0.75rem; display:flex; flex-direction:column; gap:0.6rem;">
+                <div>
+                  <div class="slider-header">
+                    <span>Grosor del Borde</span>
+                    <span id="stickerWidthVal">12px</span>
+                  </div>
+                  <input type="range" id="stickerWidthInput" class="range-input" min="2" max="35" value="12" />
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.2rem;">
+                  <span style="font-size:0.75rem; color:var(--text-muted);">Color del contorno:</span>
+                  <div style="display:flex; align-items:center; gap:0.4rem;">
+                    <input type="color" id="stickerColorPicker" class="custom-color-input" style="width:24px; height:24px;" value="#FFFFFF" />
+                    <span id="stickerColorHex" style="font-family:monospace; font-size:0.75rem;">#FFFFFF</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Transformación y Proporción del Lienzo -->
+          <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
+            <div class="control-group-title" style="margin-bottom: 0.65rem;">
+              <span style="display:flex; align-items:center; gap:0.4rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                Transformación y Lienzo
+              </span>
+              <button type="button" id="resetTransformBtn" class="btn-text-action" title="Restablecer giro y proporción a original">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                Restablecer
+              </button>
+            </div>
+
+            <!-- Botones de volteo y rotación -->
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin-bottom: 0.85rem;">
+              <button type="button" id="flipHBtn" class="transform-btn" title="Voltear Horizontal (tecla H)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                Voltear H
+              </button>
+              <button type="button" id="flipVBtn" class="transform-btn" title="Voltear Vertical (tecla V)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/><line x1="12" y1="21" x2="12" y2="21"/></svg>
+                Voltear V
+              </button>
+              <button type="button" id="rotateBtn" class="transform-btn" title="Girar 90° hacia la derecha (tecla R)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Rotar 90°
+              </button>
+            </div>
+
+            <!-- Relación de Aspecto / Canvas Preset -->
+            <div>
+              <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.4rem;">Preset de Lienzo (Redes Sociales):</span>
+              <div class="aspect-pills">
+                <button type="button" class="aspect-pill-btn active" data-aspect="original" title="Tamaño original">Original</button>
+                <button type="button" class="aspect-pill-btn" data-aspect="1:1" title="Cuadrado (1:1) - Post / Avatar / Tienda">1:1</button>
+                <button type="button" class="aspect-pill-btn" data-aspect="9:16" title="Vertical (9:16) - Stories / Reels / TikTok">9:16</button>
+                <button type="button" class="aspect-pill-btn" data-aspect="16:9" title="Horizontal (16:9) - YouTube / Banner">16:9</button>
+                <button type="button" class="aspect-pill-btn" data-aspect="4:5" title="Vertical (4:5) - Feed Instagram">4:5</button>
+              </div>
+            </div>
+
+            <!-- Botón para aplicar ajustes actuales a todo el lote -->
+            <div style="margin-top:0.85rem;">
+              <button type="button" id="applyToAllBatchBtn" class="btn-clipboard" style="font-size:0.76rem; padding:0.45rem 0.6rem;" title="Propagar fondo, filtros de color, sombras y lienzo a todas las imágenes en cola">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                <span>Aplicar estos ajustes a todo el lote</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Opciones de Exportación y Descarga -->
+          <div class="export-box">
+            <div class="control-group-title" style="margin-bottom:0.5rem;">
+              <span>Exportar Foto Actual</span>
+            </div>
+
+            <!-- Formato: PNG vs JPG -->
+            <div class="format-pills">
+              <button id="formatPngBtn" class="format-pill-btn active">PNG (Transparente o Fondo)</button>
+              <button id="formatJpgBtn" class="format-pill-btn">JPG (Con Fondo)</button>
+            </div>
+
+            <!-- Slider de calidad para JPG -->
+            <div id="jpgQualityRow" class="hidden" style="margin-top:0.35rem;">
+              <div class="slider-header">
+                <span>Calidad JPG</span>
+                <span id="jpgQualityVal">92%</span>
+              </div>
+              <input type="range" id="jpgQualityInput" class="range-input" min="50" max="100" value="92" />
+            </div>
+
+            <!-- Escala de resolución de exportación -->
+            <div style="margin-top:0.25rem;">
+              <div class="slider-header" style="margin-bottom:0.3rem;">
+                <span>Resolución de Salida</span>
+                <span id="exportScaleVal">100% (Original)</span>
+              </div>
+              <div class="format-pills">
+                <button type="button" class="scale-pill-btn active" data-scale="1.0">100% (Máxima)</button>
+                <button type="button" class="scale-pill-btn" data-scale="0.75">75% (HD)</button>
+                <button type="button" class="scale-pill-btn" data-scale="0.5">50% (Web)</button>
+              </div>
+            </div>
+
+            <!-- Caja de Estimación de Salida -->
+            <div id="exportEstimateBadge" class="export-estimate-box">
+              <div style="display:flex; align-items:center; gap:0.4rem; color:var(--text-muted); font-size:0.75rem;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>Estimación:</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.5rem; font-family:monospace; font-size:0.75rem;">
+                <span id="estDimensions">0 × 0 px</span>
+                <span style="color:var(--text-subtle);">•</span>
+                <span id="estFileSize" style="color:var(--primary); font-weight:600;">~0 KB</span>
+              </div>
+            </div>
+
+            <!-- Botón principal de Descarga de la imagen actual -->
+            <button id="downloadBtn" class="btn-download-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Descargar Foto Actual</span>
+            </button>
+
+            <!-- Botón de Copiar al Portapapeles -->
+            <button id="copyClipboardBtn" class="btn-clipboard" title="Copiar al portapapeles con canal alfa (Ctrl+C)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copiar al Portapapeles</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <!-- Banner Oficial del Creador: Un Fantasma en el Sistema -->
+      <a href="https://www.unfantasmaenelsistema.com/" target="_blank" rel="noopener noreferrer" class="footer-creator-card" title="Visitar Un Fantasma en el Sistema (Sitio Web Oficial)">
+        <div class="footer-logo-wrapper">
+          <img src="/assets/aistudio/icono_81a3db5b.png" alt="Logo de Un Fantasma en el Sistema" class="footer-logo-img" />
+        </div>
+        <div class="footer-creator-info">
+          <span class="footer-creator-tag">Sitio Web Oficial</span>
+          <span class="footer-creator-title">Un Fantasma en el Sistema</span>
+          <span class="footer-creator-url">
+            https://www.unfantasmaenelsistema.com/
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </span>
+        </div>
+      </a>
+
+      <div>ClearCut AI — Motor de segmentación ISNet / WebAssembly en el navegador del usuario con soporte para lotes en cola.</div>
+      <div class="footer-links">
+        <a href="https://www.unfantasmaenelsistema.com/" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-weight: 600;">unfantasmaenelsistema.com</a>
+        <span>•</span>
+        <a href="https://github.com/imgly/background-removal-js" target="_blank" rel="noopener noreferrer">@imgly/background-removal</a>
+        <span>•</span>
+        <span>Sin servidor</span>
+        <span>•</span>
+        <span>Privacidad Total</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Modal de Atajos de Teclado -->
+  <div id="shortcutsModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6" y2="8"/><line x1="10" y1="8" x2="10" y2="8"/><line x1="14" y1="8" x2="14" y2="8"/><line x1="18" y1="8" x2="18" y2="8"/><line x1="6" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
+          <span>Atajos de Teclado Profesionales</span>
+        </div>
+        <button id="closeShortcutsBtn" class="btn-icon" style="width:28px; height:28px;" title="Cerrar modal (Esc)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+      </div>
+      <div class="shortcut-list">
+        <div class="shortcut-item">
+          <span>Descargar foto actual</span>
+          <span class="shortcut-key">Ctrl + D / Cmd + S</span>
+        </div>
+        <div class="shortcut-item">
+          <span>Copiar al portapapeles</span>
+          <span class="shortcut-key">Ctrl + C / Cmd + C</span>
+        </div>
+        <div class="shortcut-item">
+          <span>Alternar Antes / Después</span>
+          <span class="shortcut-key">Espacio</span>
+        </div>
+        <div class="shortcut-item">
+          <span>Voltear Horizontal</span>
+          <span class="shortcut-key">H</span>
+        </div>
+        <div class="shortcut-item">
+          <span>Voltear Vertical</span>
+          <span class="shortcut-key">V</span>
+        </div>
+        <div class="shortcut-item">
+          <span>Rotar 90° a la derecha</span>
+          <span class="shortcut-key">R</span>
+        </div>
+        <div class="shortcut-item">
+          <span>Aumentar / Reducir Zoom</span>
+          <span class="shortcut-key">+ / -</span>
+        </div>
+        <div class="shortcut-item">
+          <span>Restablecer Zoom (100%)</span>
+          <span class="shortcut-key">0</span>
+        </div>
+        <div class="shortcut-item">
+          <span>Ver este diálogo</span>
+          <span class="shortcut-key">?</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LÓGICA DE APLICACIÓN ES6+ VANILLA CON COLA SECUENCIAL -->
+  <script type="module">
+    /**
+     * ClearCut AI - Single File App con Cola de Procesamiento por Lotes
+     * Inferencia secuencial en navegador con WebAssembly y @imgly/background-removal
+     */
+
+    // --- Estructura de Elemento de la Cola ---
+    // {
+    //   id: string,
+    //   file: File | Blob,
+    //   name: string,
+    //   size: number,
+    //   status: 'pending' | 'processing' | 'done' | 'error',
+    //   progress: number, // 0 - 100
+    //   originalUrl: string,
+    //   originalImg: HTMLImageElement,
+    //   cutoutBlob: Blob,
+    //   cutoutUrl: string,
+    //   cutoutImg: HTMLImageElement,
+    //   duration: number,
+    //   error: string
+    // }
+
+    const state = {
+      // Cola de imágenes
+      queue: [],
+      currentIndex: -1,
+      selectedIndex: -1,
+      isQueueRunning: false,
+      cancelRequested: false,
+
+      // Ajustes de Fondo Global / Activo
+      bgType: 'transparent', // 'transparent' | 'color' | 'gradient' | 'image'
+      solidColor: '#FFFFFF',
+      gradientStr: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
+      bgBlur: 0,
+      customBgImg: null,
+      customBgUrl: null,
+
+      // Visor y Slider
+      splitRatio: 0.5,
+      viewMode: 'split', // 'split' | 'final'
+      zoom: 1.0,
+      isDraggingSplit: false,
+
+      // Ajustes de Imagen Recortada (Brillo, Contraste, Saturación)
+      brightness: 100,
+      contrast: 100,
+      saturation: 100,
+
+      // Efectos Pro (Sombra y Sticker)
+      shadowEnabled: false,
+      shadowBlur: 25,
+      shadowOffsetY: 15,
+      shadowOpacity: 35,
+      shadowColor: '#000000',
+
+      stickerEnabled: false,
+      stickerWidth: 12,
+      stickerColor: '#FFFFFF',
+
+      // Transformaciones
+      flipH: false,
+      flipV: false,
+      rotation: 0, // 0, 90, 180, 270
+
+      // Proporción del Lienzo / Aspect Ratio Preset
+      aspectRatio: 'original', // 'original' | '1:1' | '9:16' | '16:9' | '4:5'
+
+      // Escala de Exportación
+      exportScale: 1.0, // 1.0 | 0.75 | 0.5
+
+      // Exportación
+      exportFormat: 'image/png', // 'image/png' | 'image/jpeg'
+      exportQuality: 0.92,
+    };
+
+    // --- Referencias DOM ---
+    const dom = {
+      // Secciones
+      compatAlert: document.getElementById('compatAlert'),
+      uploadSection: document.getElementById('uploadSection'),
+      batchProgressSection: document.getElementById('batchProgressSection'),
+      editorSection: document.getElementById('editorSection'),
+
+      // Dropzone & Inputs
+      dropzone: document.getElementById('dropzone'),
+      fileInput: document.getElementById('fileInput'),
+      browseBtn: document.getElementById('browseBtn'),
+      sampleBatchBtn: document.getElementById('sampleBatchBtn'),
+
+      // Progreso de Cola
+      batchProgressMainTitle: document.getElementById('batchProgressMainTitle'),
+      batchProgressSubtitle: document.getElementById('batchProgressSubtitle'),
+      cancelQueueBtn: document.getElementById('cancelQueueBtn'),
+      cumulativeBarTitle: document.getElementById('cumulativeBarTitle'),
+      cumulativePercentLabel: document.getElementById('cumulativePercentLabel'),
+      cumulativeBarFill: document.getElementById('cumulativeBarFill'),
+      currentItemName: document.getElementById('currentItemName'),
+      currentItemPercent: document.getElementById('currentItemPercent'),
+      currentItemFill: document.getElementById('currentItemFill'),
+      batchQueueGrid: document.getElementById('batchQueueGrid'),
+
+      // Editor & Tira de Cola
+      editorQueueBar: document.getElementById('editorQueueBar'),
+      queueStatsBadge: document.getElementById('queueStatsBadge'),
+      queueStripScroll: document.getElementById('queueStripScroll'),
+      batchDownloadZipBtn: document.getElementById('batchDownloadZipBtn'),
+      addMoreFilesBtn: document.getElementById('addMoreFilesBtn'),
+      addMoreFileInput: document.getElementById('addMoreFileInput'),
+      resetBtn: document.getElementById('resetBtn'),
+      imgDimensionsText: document.getElementById('imgDimensionsText'),
+      inferenceTimeText: document.getElementById('inferenceTimeText'),
+      currentFileNameText: document.getElementById('currentFileNameText'),
+      quickToggleOriginalBtn: document.getElementById('quickToggleOriginalBtn'),
+
+      // Visor
+      viewerStage: document.getElementById('viewerStage'),
+      zoomWrapper: document.getElementById('zoomWrapper'),
+      previewCanvas: document.getElementById('previewCanvas'),
+      originalSplitLayer: document.getElementById('originalSplitLayer'),
+      originalSplitImg: document.getElementById('originalSplitImg'),
+      splitSliderLine: document.getElementById('splitSliderLine'),
+      badgeBefore: document.getElementById('badgeBefore'),
+      badgeAfter: document.getElementById('badgeAfter'),
+      tabSplitView: document.getElementById('tabSplitView'),
+      tabFinalOnly: document.getElementById('tabFinalOnly'),
+      zoomInBtn: document.getElementById('zoomInBtn'),
+      zoomOutBtn: document.getElementById('zoomOutBtn'),
+      zoomResetBtn: document.getElementById('zoomResetBtn'),
+      zoomLabel: document.getElementById('zoomLabel'),
+
+      // Fondos
+      bgTypeBtns: document.querySelectorAll('.bg-type-btn'),
+      bgPanelTransparent: document.getElementById('bgPanelTransparent'),
+      bgPanelColor: document.getElementById('bgPanelColor'),
+      bgPanelGradient: document.getElementById('bgPanelGradient'),
+      bgPanelImage: document.getElementById('bgPanelImage'),
+      colorSwatches: document.querySelectorAll('.color-swatch-btn'),
+      customColorPicker: document.getElementById('customColorPicker'),
+      customColorHex: document.getElementById('customColorHex'),
+      gradientSwatches: document.querySelectorAll('.gradient-swatch-btn'),
+      customBgDropzone: document.getElementById('customBgDropzone'),
+      customBgFileInput: document.getElementById('customBgFileInput'),
+      customBgPreviewRow: document.getElementById('customBgPreviewRow'),
+      customBgThumb: document.getElementById('customBgThumb'),
+      removeCustomBgBtn: document.getElementById('removeCustomBgBtn'),
+      bgBlurInput: document.getElementById('bgBlurInput'),
+      blurVal: document.getElementById('blurVal'),
+
+      // Ajustes de Imagen Recortada
+      brightnessInput: document.getElementById('brightnessInput'),
+      brightnessVal: document.getElementById('brightnessVal'),
+      contrastInput: document.getElementById('contrastInput'),
+      contrastVal: document.getElementById('contrastVal'),
+      saturationInput: document.getElementById('saturationInput'),
+      saturationVal: document.getElementById('saturationVal'),
+      resetAdjustmentsBtn: document.getElementById('resetAdjustmentsBtn'),
+
+      // Efectos Pro
+      shadowCard: document.getElementById('shadowCard'),
+      shadowToggle: document.getElementById('shadowToggle'),
+      shadowBadge: document.getElementById('shadowBadge'),
+      shadowControlsWrap: document.getElementById('shadowControlsWrap'),
+      shadowBlurInput: document.getElementById('shadowBlurInput'),
+      shadowBlurVal: document.getElementById('shadowBlurVal'),
+      shadowOffsetYInput: document.getElementById('shadowOffsetYInput'),
+      shadowOffsetYVal: document.getElementById('shadowOffsetYVal'),
+      shadowOpacityInput: document.getElementById('shadowOpacityInput'),
+      shadowOpacityVal: document.getElementById('shadowOpacityVal'),
+      shadowColorPicker: document.getElementById('shadowColorPicker'),
+      shadowColorHex: document.getElementById('shadowColorHex'),
+
+      stickerCard: document.getElementById('stickerCard'),
+      stickerToggle: document.getElementById('stickerToggle'),
+      stickerBadge: document.getElementById('stickerBadge'),
+      stickerControlsWrap: document.getElementById('stickerControlsWrap'),
+      stickerWidthInput: document.getElementById('stickerWidthInput'),
+      stickerWidthVal: document.getElementById('stickerWidthVal'),
+      stickerColorPicker: document.getElementById('stickerColorPicker'),
+      stickerColorHex: document.getElementById('stickerColorHex'),
+      resetEffectsBtn: document.getElementById('resetEffectsBtn'),
+
+      // Transformación y Lienzo
+      flipHBtn: document.getElementById('flipHBtn'),
+      flipVBtn: document.getElementById('flipVBtn'),
+      rotateBtn: document.getElementById('rotateBtn'),
+      resetTransformBtn: document.getElementById('resetTransformBtn'),
+      aspectPillBtns: document.querySelectorAll('.aspect-pill-btn'),
+      applyToAllBatchBtn: document.getElementById('applyToAllBatchBtn'),
+
+      // Exportación Extendida y Estimación
+      scalePillBtns: document.querySelectorAll('.scale-pill-btn'),
+      exportScaleVal: document.getElementById('exportScaleVal'),
+      exportEstimateBadge: document.getElementById('exportEstimateBadge'),
+      estDimensions: document.getElementById('estDimensions'),
+      estFileSize: document.getElementById('estFileSize'),
+
+      // Modal de Atajos
+      shortcutsModalBtn: document.getElementById('shortcutsModalBtn'),
+      shortcutsModal: document.getElementById('shortcutsModal'),
+      closeShortcutsBtn: document.getElementById('closeShortcutsBtn'),
+
+      // Exportación
+      formatPngBtn: document.getElementById('formatPngBtn'),
+      formatJpgBtn: document.getElementById('formatJpgBtn'),
+      jpgQualityRow: document.getElementById('jpgQualityRow'),
+      jpgQualityInput: document.getElementById('jpgQualityInput'),
+      jpgQualityVal: document.getElementById('jpgQualityVal'),
+      downloadBtn: document.getElementById('downloadBtn'),
+      copyClipboardBtn: document.getElementById('copyClipboardBtn'),
+
+      // Historial Local (localStorage)
+      historyBar: document.getElementById('historyBar'),
+      historyGrid: document.getElementById('historyGrid'),
+      clearHistoryBtn: document.getElementById('clearHistoryBtn'),
+      viewHistoryFromEditorBtn: document.getElementById('viewHistoryFromEditorBtn'),
+
+      // Tema & Toasts
+      themeToggleBtn: document.getElementById('themeToggleBtn'),
+      themeIconSun: document.getElementById('themeIconSun'),
+      themeIconMoon: document.getElementById('themeIconMoon'),
+      toastContainer: document.getElementById('toastContainer'),
+    };
+
+    // --- Verificación de Compatibilidad ---
+    function checkBrowserCompatibility() {
+      const hasWasm = typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function';
+      const hasWorker = typeof Worker !== 'undefined';
+      if (!hasWasm || !hasWorker) {
+        dom.compatAlert.style.display = 'flex';
+        showToast('Navegador incompatible con WebAssembly o Workers', 'error');
+        return false;
+      }
+      return true;
+    }
+
+    // --- Notificaciones Toast ---
+    function showToast(message, type = 'info', duration = 3500) {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      
+      let icon = '';
+      if (type === 'success') {
+        icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+      } else if (type === 'error') {
+        icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+      } else {
+        icon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="8"/></svg>';
+      }
+      
+      toast.innerHTML = `${icon}<span>${message}</span>`;
+      dom.toastContainer.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    // --- Alternar Tema Claro / Oscuro ---
+    function initTheme() {
+      const savedTheme = localStorage.getItem('clearcut_theme') || 'dark';
+      applyTheme(savedTheme);
+
+      dom.themeToggleBtn.addEventListener('click', () => {
+        const currentTheme = document.documentElement.classList.contains('light') ? 'light' : 'dark';
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        applyTheme(newTheme);
+      });
+    }
+
+    function applyTheme(theme) {
+      if (theme === 'light') {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+        dom.themeIconSun.classList.add('hidden');
+        dom.themeIconMoon.classList.remove('hidden');
+      } else {
+        document.documentElement.classList.remove('light');
+        document.documentElement.classList.add('dark');
+        dom.themeIconSun.classList.remove('hidden');
+        dom.themeIconMoon.classList.add('hidden');
+      }
+      localStorage.setItem('clearcut_theme', theme);
+    }
+
+    // --- Limpieza de Memoria Eficiente ---
+    function clearItemUrls(item) {
+      if (item.originalUrl) {
+        URL.revokeObjectURL(item.originalUrl);
+        item.originalUrl = null;
+      }
+      if (item.cutoutUrl) {
+        URL.revokeObjectURL(item.cutoutUrl);
+        item.cutoutUrl = null;
+      }
+    }
+
+    function clearEntireQueue() {
+      state.queue.forEach(clearItemUrls);
+      state.queue = [];
+      state.currentIndex = -1;
+      state.selectedIndex = -1;
+      if (state.customBgUrl) {
+        URL.revokeObjectURL(state.customBgUrl);
+        state.customBgUrl = null;
+        state.customBgImg = null;
+      }
+    }
+
+    // --- Cargador Dinámico de @imgly/background-removal ---
+    let cachedRemoveBgFn = null;
+
+    async function loadImglyRemoveBackground() {
+      if (cachedRemoveBgFn) return cachedRemoveBgFn;
+
+      if (typeof window.imglyRemoveBackground === 'function') {
+        cachedRemoveBgFn = window.imglyRemoveBackground;
+        return cachedRemoveBgFn;
+      }
+      if (typeof window.removeBackground === 'function') {
+        cachedRemoveBgFn = window.removeBackground;
+        return cachedRemoveBgFn;
+      }
+      if (window.imgly && typeof window.imgly.removeBackground === 'function') {
+        cachedRemoveBgFn = window.imgly.removeBackground;
+        return cachedRemoveBgFn;
+      }
+
+      const cdnEndpoints = [
+        'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.7/+esm',
+        'https://esm.sh/@imgly/background-removal@1.5.7',
+        'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/+esm',
+        'https://unpkg.com/@imgly/background-removal@1.5.7/dist/index.mjs'
+      ];
+
+      for (const endpoint of cdnEndpoints) {
+        try {
+          const module = await import(/* @vite-ignore */ endpoint);
+          const fn = module.removeBackground || module.default?.removeBackground || module.default;
+          if (typeof fn === 'function') {
+            cachedRemoveBgFn = fn;
+            return cachedRemoveBgFn;
+          }
+        } catch (err) {
+          console.warn(`Fallback CDN desde ${endpoint}:`, err);
+        }
+      }
+
+      throw new Error('No se pudo inicializar la librería de IA desde el CDN.');
+    }
+
+    // --- GESTIÓN DE HISTORIAL EN LOCALSTORAGE (ÚLTIMAS 5 IMÁGENES) ---
+    const STORAGE_KEY = 'clearcut_history_v1';
+
+    function getLocalHistory() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        console.warn('Error al leer historial de localStorage:', e);
+        return [];
+      }
+    }
+
+    function createScaledDataUrl(img, maxDim = 320, mime = 'image/png', quality = 0.8) {
+      if (!img) return '';
+      const canvas = document.createElement('canvas');
+      let w = img.naturalWidth || img.width || 300;
+      let h = img.naturalHeight || img.height || 300;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      canvas.width = Math.max(1, w);
+      canvas.height = Math.max(1, h);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL(mime, quality);
+    }
+
+    function saveToLocalHistory(item) {
+      try {
+        if (!item || !item.cutoutImg) return;
+        const cutoutThumb = createScaledDataUrl(item.cutoutImg, 320, 'image/png');
+        const originalThumb = item.originalImg ? createScaledDataUrl(item.originalImg, 320, 'image/jpeg', 0.75) : '';
+
+        const historyEntry = {
+          id: 'hist_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          name: item.name || 'recorte.png',
+          timestamp: Date.now(),
+          dimensions: `${item.cutoutImg.naturalWidth} × ${item.cutoutImg.naturalHeight}`,
+          duration: item.duration || '1.0',
+          cutoutThumb,
+          originalThumb,
+          brightness: item.brightness ?? 100,
+          contrast: item.contrast ?? 100,
+          saturation: item.saturation ?? 100
+        };
+
+        let history = getLocalHistory();
+        // Filtrar duplicados por nombre y limitar estrictamente a las últimas 5 imágenes
+        history = [historyEntry, ...history.filter(h => h.name !== item.name)].slice(0, 5);
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        renderHistoryUI();
+      } catch (err) {
+        console.warn('Fallo al escribir en localStorage (posible límite de cuota):', err);
+        try {
+          let history = getLocalHistory().slice(0, 3);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        } catch (_) {}
+      }
+    }
+
+    function deleteHistoryItem(id, e) {
+      if (e) e.stopPropagation();
+      try {
+        let history = getLocalHistory();
+        history = history.filter(h => h.id !== id);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        renderHistoryUI();
+        showToast('Imagen eliminada del historial', 'info', 1500);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function clearAllHistory() {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+        renderHistoryUI();
+        showToast('Historial local vaciado', 'info', 2000);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderHistoryUI() {
+      const history = getLocalHistory();
+      if (!dom.historyBar || !dom.historyGrid) return;
+
+      if (history.length === 0) {
+        dom.historyBar.classList.add('hidden');
+        dom.historyGrid.innerHTML = '';
+        return;
+      }
+
+      dom.historyBar.classList.remove('hidden');
+      dom.historyGrid.innerHTML = '';
+
+      history.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        card.title = `Haz clic para recuperar "${item.name}" en el editor`;
+
+        const timeStr = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        card.innerHTML = `
+          <div class="history-card-thumb-wrap checkerboard-bg">
+            <img src="${item.cutoutThumb}" class="history-card-thumb" alt="${item.name}" />
+          </div>
+          <div class="history-card-name" title="${item.name}">${item.name}</div>
+          <div class="history-card-meta">${item.dimensions} px</div>
+          <div class="history-card-meta" style="color:var(--text-subtle);">${timeStr}</div>
+          <button class="history-card-del" title="Eliminar del historial" type="button">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        `;
+
+        card.querySelector('.history-card-del').addEventListener('click', (e) => {
+          deleteHistoryItem(item.id, e);
+        });
+
+        card.addEventListener('click', () => {
+          restoreFromHistory(item);
+        });
+
+        dom.historyGrid.appendChild(card);
+      });
+    }
+
+    async function restoreFromHistory(historyItem) {
+      try {
+        showToast(`Recuperando "${historyItem.name}"...`, 'info', 1500);
+
+        const cutoutImg = await loadImageElement(historyItem.cutoutThumb);
+        const originalImg = historyItem.originalThumb 
+          ? await loadImageElement(historyItem.originalThumb)
+          : cutoutImg;
+
+        const cutoutBlob = await fetch(historyItem.cutoutThumb).then(r => r.blob());
+        const originalBlob = historyItem.originalThumb 
+          ? await fetch(historyItem.originalThumb).then(r => r.blob())
+          : cutoutBlob;
+
+        const cutoutUrl = URL.createObjectURL(cutoutBlob);
+        const originalUrl = URL.createObjectURL(originalBlob);
+
+        const queueItem = {
+          id: historyItem.id,
+          file: originalBlob,
+          name: historyItem.name,
+          size: cutoutBlob.size,
+          status: 'done',
+          progress: 100,
+          originalUrl,
+          originalImg,
+          cutoutBlob,
+          cutoutUrl,
+          cutoutImg,
+          brightness: historyItem.brightness ?? 100,
+          contrast: historyItem.contrast ?? 100,
+          saturation: historyItem.saturation ?? 100,
+          duration: historyItem.duration || '1.0',
+          error: null
+        };
+
+        state.queue.push(queueItem);
+        const newIdx = state.queue.length - 1;
+
+        dom.uploadSection.style.display = 'none';
+        dom.batchProgressSection.style.display = 'none';
+        dom.editorSection.style.display = 'flex';
+
+        selectQueueItem(newIdx, true);
+        renderQueueStrip();
+        showToast(`"${historyItem.name}" recuperada con éxito`, 'success');
+      } catch (err) {
+        console.error('Error al recuperar desde historial:', err);
+        showToast('No se pudo recuperar la imagen guardada', 'error');
+      }
+    }
+
+    // --- GESTIÓN DE LA COLA DE PROCESAMIENTO SECUENCIAL ---
+
+    function addFilesToQueue(fileList) {
+      if (!checkBrowserCompatibility()) return;
+
+      const newItems = [];
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        if (!file.type.match(/^image\/(jpeg|png|webp|avif)$/i)) {
+          showToast(`Omitido "${file.name}": formato no compatible`, 'error');
+          continue;
+        }
+
+        const id = 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        const originalUrl = URL.createObjectURL(file);
+
+        newItems.push({
+          id,
+          file,
+          name: file.name || `imagen_${state.queue.length + newItems.length + 1}.png`,
+          size: file.size || 0,
+          status: 'pending',
+          progress: 0,
+          originalUrl,
+          originalImg: null,
+          cutoutBlob: null,
+          cutoutUrl: null,
+          cutoutImg: null,
+          brightness: 100,
+          contrast: 100,
+          saturation: 100,
+          duration: 0,
+          error: null
+        });
+      }
+
+      if (newItems.length === 0) return;
+
+      state.queue.push(...newItems);
+      showToast(`${newItems.length} foto(s) añadidas a la cola`, 'info');
+
+      // Si no hay procesamiento activo, iniciar la cola
+      if (!state.isQueueRunning) {
+        startQueueProcessing();
+      } else {
+        renderQueueProgressUI();
+        renderQueueStrip();
+      }
+    }
+
+    async function startQueueProcessing() {
+      if (state.isQueueRunning) return;
+      state.isQueueRunning = true;
+      state.cancelRequested = false;
+
+      // Cambiar vistas
+      dom.uploadSection.style.display = 'none';
+      dom.batchProgressSection.style.display = 'block';
+
+      let removeBackground;
+      try {
+        updateCumulativeProgressUI(0, 'Iniciando WebAssembly...');
+        removeBackground = await loadImglyRemoveBackground();
+      } catch (err) {
+        showToast(err.message, 'error');
+        state.isQueueRunning = false;
+        dom.batchProgressSection.style.display = 'none';
+        dom.uploadSection.style.display = 'block';
+        return;
+      }
+
+      while (true) {
+        if (state.cancelRequested) {
+          showToast('Procesamiento de cola detenido', 'info');
+          break;
+        }
+
+        // Buscar siguiente elemento pendiente
+        const nextIdx = state.queue.findIndex(item => item.status === 'pending');
+        if (nextIdx === -1) {
+          // No quedan más pendientes en la cola
+          break;
+        }
+
+        state.currentIndex = nextIdx;
+        const currentItem = state.queue[nextIdx];
+        currentItem.status = 'processing';
+        currentItem.progress = 0;
+
+        renderQueueProgressUI();
+        renderQueueStrip();
+
+        const itemStartTime = performance.now();
+
+        try {
+          // Cargar imagen original si no está cargada
+          if (!currentItem.originalImg) {
+            currentItem.originalImg = await loadImageElement(currentItem.originalUrl);
+          }
+
+          dom.currentItemName.textContent = `Procesando: ${currentItem.name}`;
+          dom.currentItemPercent.textContent = '0%';
+          dom.currentItemFill.style.width = '0%';
+
+          // Configuración @imgly/background-removal
+          const config = {
+            publicPath: 'https://staticimgly.com/@imgly/background-removal-data/1.5.7/dist/',
+            progress: (key, current, total) => {
+              if (state.cancelRequested) return;
+              const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+              currentItem.progress = percent;
+
+              let detailText = `Calculando máscara (${percent}%)`;
+              if (key.includes('model') || key.includes('onnx')) {
+                detailText = `Descargando pesos ONNX: ${formatBytes(current)}/${formatBytes(total)}`;
+              } else if (key.includes('wasm')) {
+                detailText = `Cargando binario WebAssembly`;
+              }
+
+              dom.currentItemName.textContent = `${currentItem.name} — ${detailText}`;
+              dom.currentItemPercent.textContent = `${percent}%`;
+              dom.currentItemFill.style.width = `${percent}%`;
+
+              // Actualizar barra acumulada en tiempo real
+              updateCumulativeBarWithSubProgress(nextIdx, percent);
+            },
+            model: 'isnet_fp16',
+            device: 'cpu',
+            output: {
+              format: 'image/png',
+              quality: 1.0,
+            }
+          };
+
+          const outputBlob = await removeBackground(currentItem.file, config);
+          
+          currentItem.cutoutBlob = outputBlob;
+          currentItem.cutoutUrl = URL.createObjectURL(outputBlob);
+          currentItem.cutoutImg = await loadImageElement(currentItem.cutoutUrl);
+          currentItem.status = 'done';
+          currentItem.progress = 100;
+          currentItem.duration = ((performance.now() - itemStartTime) / 1000).toFixed(2);
+
+          // Guardar en localStorage (últimas 5 imágenes)
+          saveToLocalHistory(currentItem);
+
+          // Si es el primer elemento terminado, previsualizarlo ya en el editor
+          if (state.selectedIndex === -1) {
+            selectQueueItem(nextIdx, false);
+          }
+        } catch (err) {
+          console.error(`Error procesando ${currentItem.name}:`, err);
+          currentItem.status = 'error';
+          currentItem.error = err.message || 'Error de procesamiento';
+        }
+
+        renderQueueProgressUI();
+        renderQueueStrip();
+        updateCumulativeBarWithSubProgress(nextIdx + 1, 0);
+      }
+
+      state.isQueueRunning = false;
+
+      // Finalizado el lote
+      const completedCount = state.queue.filter(i => i.status === 'done').length;
+      showToast(`¡Lote completado! ${completedCount} de ${state.queue.length} imágenes listas`, 'success', 5000);
+
+      // Si hay al menos un elemento terminado, seleccionar el primero si no hay selección
+      if (state.selectedIndex === -1) {
+        const firstDone = state.queue.findIndex(i => i.status === 'done');
+        if (firstDone !== -1) {
+          selectQueueItem(firstDone, true);
+        }
+      }
+
+      // Mostrar el editor interactivo con la tira de cola
+      dom.batchProgressSection.style.display = 'none';
+      dom.editorSection.style.display = 'flex';
+      renderQueueStrip();
+      if (state.selectedIndex !== -1) {
+        renderPreview();
+      }
+    }
+
+    // --- Cálculo y renderizado de la barra de progreso acumulada ---
+    function updateCumulativeBarWithSubProgress(completedItems, currentSubPercent) {
+      const total = state.queue.length;
+      if (total === 0) return;
+
+      const fraction = Math.min(100, Math.max(0, currentSubPercent)) / 100;
+      const effectiveCompleted = completedItems + fraction;
+      const overallPercent = Math.min(100, Math.round((effectiveCompleted / total) * 100));
+
+      const doneCount = state.queue.filter(i => i.status === 'done').length;
+      const processingIndex = state.queue.findIndex(i => i.status === 'processing');
+      const currentPos = processingIndex !== -1 ? processingIndex + 1 : doneCount;
+
+      dom.cumulativeBarTitle.textContent = `Progreso Acumulado: ${doneCount} de ${total} completadas (Procesando ${currentPos}/${total})`;
+      dom.cumulativePercentLabel.textContent = `${overallPercent}%`;
+      dom.cumulativeBarFill.style.width = `${overallPercent}%`;
+
+      dom.batchProgressMainTitle.textContent = `Procesando lote: ${doneCount}/${total} fotos listas`;
+      dom.batchProgressSubtitle.textContent = `Progreso global de la tanda: ${overallPercent}%`;
+    }
+
+    function updateCumulativeProgressUI(percent, statusMsg) {
+      dom.cumulativePercentLabel.textContent = `${percent}%`;
+      dom.cumulativeBarFill.style.width = `${percent}%`;
+      if (statusMsg) {
+        dom.currentItemName.textContent = statusMsg;
+      }
+    }
+
+    // Renderizar la cuadrícula de estado de la cola durante el progreso
+    function renderQueueProgressUI() {
+      const grid = dom.batchQueueGrid;
+      grid.innerHTML = '';
+
+      state.queue.forEach((item, idx) => {
+        const el = document.createElement('div');
+        el.className = `queue-preview-item ${idx === state.currentIndex ? 'active' : ''}`;
+
+        let statusText = 'En cola';
+        let statusClass = 'status-pending';
+
+        if (item.status === 'processing') {
+          statusText = `${item.progress}%`;
+          statusClass = 'status-processing';
+        } else if (item.status === 'done') {
+          statusText = 'Listo ✓';
+          statusClass = 'status-done';
+        } else if (item.status === 'error') {
+          statusText = 'Error ✕';
+          statusClass = 'status-error';
+        }
+
+        // Mostrar miniatura: si está listo, mostrar el recorte con fondo de tablero de ajedrez
+        const thumbSrc = (item.status === 'done' && item.cutoutUrl) ? item.cutoutUrl : item.originalUrl;
+
+        el.innerHTML = `
+          <img src="${thumbSrc}" class="queue-item-thumb ${item.status === 'done' ? 'checkerboard-bg' : ''}" alt="${item.name}" />
+          <div class="queue-item-name" title="${item.name}">${item.name}</div>
+          <div class="queue-item-status-pill ${statusClass}">${statusText}</div>
+        `;
+        grid.appendChild(el);
+      });
+    }
+
+    // Renderizar la tira horizontal de miniaturas en el Editor (Queue Strip)
+    function renderQueueStrip() {
+      const container = dom.queueStripScroll;
+      container.innerHTML = '';
+
+      const doneCount = state.queue.filter(i => i.status === 'done').length;
+      const totalCount = state.queue.length;
+
+      dom.queueStatsBadge.textContent = `${doneCount} de ${totalCount} fotos listas`;
+
+      state.queue.forEach((item, idx) => {
+        const thumbBtn = document.createElement('div');
+        thumbBtn.className = `queue-strip-item ${idx === state.selectedIndex ? 'selected' : ''}`;
+        thumbBtn.title = `${item.name} (${item.status === 'done' ? 'Listo' : item.status})`;
+
+        const thumbSrc = (item.status === 'done' && item.cutoutUrl) ? item.cutoutUrl : item.originalUrl;
+        
+        let dotColor = '#94a3b8'; // pending
+        if (item.status === 'processing') dotColor = '#6366f1';
+        if (item.status === 'done') dotColor = '#10b981';
+        if (item.status === 'error') dotColor = '#ef4444';
+
+        thumbBtn.innerHTML = `
+          <img src="${thumbSrc}" class="${item.status === 'done' ? 'checkerboard-bg' : ''}" alt="${item.name}" />
+          <div class="queue-strip-status-dot" style="background-color: ${dotColor};"></div>
+        `;
+
+        thumbBtn.addEventListener('click', () => {
+          if (item.status === 'done') {
+            selectQueueItem(idx, true);
+          } else {
+            showToast(`"${item.name}" está ${item.status === 'processing' ? 'procesándose' : 'en espera'}`, 'info');
+          }
+        });
+
+        container.appendChild(thumbBtn);
+      });
+    }
+
+    function hexToRgb(hex) {
+      if (!hex) return { r: 0, g: 0, b: 0 };
+      let c = hex.replace('#', '');
+      if (c.length === 3) c = c.split('').map(x => x + x).join('');
+      const num = parseInt(c, 16);
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+      };
+    }
+
+    function computeCompositionDimensions(item, scale = 1.0) {
+      const imgW = item.cutoutImg.naturalWidth || item.cutoutImg.width;
+      const imgH = item.cutoutImg.naturalHeight || item.cutoutImg.height;
+
+      const rot = item.rotation ?? state.rotation ?? 0;
+      const effW = (rot === 90 || rot === 270) ? imgH : imgW;
+      const effH = (rot === 90 || rot === 270) ? imgW : imgH;
+
+      const aspect = item.aspectRatio ?? state.aspectRatio ?? 'original';
+      let targetW = effW;
+      let targetH = effH;
+
+      if (aspect === '1:1') {
+        const maxDim = Math.round(Math.max(effW, effH) * 1.08);
+        targetW = maxDim;
+        targetH = maxDim;
+      } else if (aspect === '9:16') {
+        if (effW / effH > 9 / 16) {
+          targetW = Math.round(effW * 1.15);
+          targetH = Math.round(targetW * (16 / 9));
+        } else {
+          targetH = Math.round(effH * 1.15);
+          targetW = Math.round(targetH * (9 / 16));
+        }
+      } else if (aspect === '16:9') {
+        if (effW / effH > 16 / 9) {
+          targetW = Math.round(effW * 1.15);
+          targetH = Math.round(targetW * (9 / 16));
+        } else {
+          targetH = Math.round(effH * 1.15);
+          targetW = Math.round(targetH * (16 / 9));
+        }
+      } else if (aspect === '4:5') {
+        if (effW / effH > 4 / 5) {
+          targetW = Math.round(effW * 1.12);
+          targetH = Math.round(targetW * (5 / 4));
+        } else {
+          targetH = Math.round(effH * 1.12);
+          targetW = Math.round(targetH * (4 / 5));
+        }
+      }
+
+      return {
+        width: Math.max(1, Math.round(targetW * scale)),
+        height: Math.max(1, Math.round(targetH * scale)),
+        drawW: Math.round(imgW * scale),
+        drawH: Math.round(imgH * scale),
+        scale
+      };
+    }
+
+    function drawCompositionToCanvas(targetCanvas, item, scale = 1.0) {
+      const { width: w, height: h, drawW, drawH } = computeCompositionDimensions(item, scale);
+      targetCanvas.width = w;
+      targetCanvas.height = h;
+      const ctx = targetCanvas.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+
+      // 1. Dibujar el fondo seleccionado
+      if (state.bgType === 'color') {
+        ctx.fillStyle = state.solidColor;
+        ctx.fillRect(0, 0, w, h);
+      } else if (state.bgType === 'gradient') {
+        applyGradientToContext(ctx, state.gradientStr, w, h);
+        ctx.fillRect(0, 0, w, h);
+      } else if (state.bgType === 'image' && state.customBgImg) {
+        ctx.save();
+        if (state.bgBlur > 0) {
+          ctx.filter = `blur(${state.bgBlur}px)`;
+        }
+        drawCoverImage(ctx, state.customBgImg, w, h);
+        ctx.restore();
+      }
+
+      // 2. Extraer parámetros de efectos y transformaciones
+      const b = item.brightness ?? state.brightness ?? 100;
+      const c = item.contrast ?? state.contrast ?? 100;
+      const s = item.saturation ?? state.saturation ?? 100;
+      const hasAdjustments = (b !== 100 || c !== 100 || s !== 100);
+
+      const shadowOn = item.shadowEnabled ?? state.shadowEnabled ?? false;
+      const shadowBlur = (item.shadowBlur ?? state.shadowBlur ?? 25) * scale;
+      const shadowOffsetY = (item.shadowOffsetY ?? state.shadowOffsetY ?? 15) * scale;
+      const shadowOpacity = (item.shadowOpacity ?? state.shadowOpacity ?? 35) / 100;
+      const shadowColor = item.shadowColor ?? state.shadowColor ?? '#000000';
+
+      const stickerOn = item.stickerEnabled ?? state.stickerEnabled ?? false;
+      const stickerWidth = Math.round((item.stickerWidth ?? state.stickerWidth ?? 12) * scale);
+      const stickerColor = item.stickerColor ?? state.stickerColor ?? '#FFFFFF';
+
+      const rot = item.rotation ?? state.rotation ?? 0;
+      const flipH = item.flipH ?? state.flipH ?? false;
+      const flipV = item.flipV ?? state.flipV ?? false;
+
+      // 3. Aplicar traslación centrada y transformaciones
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      if (rot !== 0) {
+        ctx.rotate((rot * Math.PI) / 180);
+      }
+      ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+
+      const imgX = -drawW / 2;
+      const imgY = -drawH / 2;
+
+      // 4. Sombra Suave 3D
+      if (shadowOn && shadowOpacity > 0) {
+        ctx.save();
+        const rgb = hexToRgb(shadowColor);
+        ctx.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${shadowOpacity})`;
+        ctx.shadowBlur = shadowBlur;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = shadowOffsetY;
+        ctx.drawImage(item.cutoutImg, imgX, imgY, drawW, drawH);
+        ctx.restore();
+      }
+
+      // 5. Borde Pegatina / Sticker
+      if (stickerOn && stickerWidth > 0) {
+        const origW = item.cutoutImg.naturalWidth || item.cutoutImg.width;
+        const origH = item.cutoutImg.naturalHeight || item.cutoutImg.height;
+
+        const silCanvas = document.createElement('canvas');
+        silCanvas.width = origW;
+        silCanvas.height = origH;
+        const silCtx = silCanvas.getContext('2d');
+        silCtx.drawImage(item.cutoutImg, 0, 0);
+        silCtx.globalCompositeOperation = 'source-in';
+        silCtx.fillStyle = stickerColor;
+        silCtx.fillRect(0, 0, origW, origH);
+
+        const angleStep = Math.PI / 8; // 16 ángulos
+        for (let r = 2; r <= stickerWidth; r += 2) {
+          for (let a = 0; a < Math.PI * 2; a += angleStep) {
+            ctx.drawImage(
+              silCanvas,
+              imgX + Math.cos(a) * r,
+              imgY + Math.sin(a) * r,
+              drawW,
+              drawH
+            );
+          }
+        }
+      }
+
+      // 6. Recorte principal con filtros de brillo, contraste y saturación
+      ctx.save();
+      if (hasAdjustments) {
+        ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+      }
+      ctx.drawImage(item.cutoutImg, imgX, imgY, drawW, drawH);
+      ctx.restore();
+
+      ctx.restore(); // Termina traslación y rotación
+    }
+
+    let estDebounceTimer = null;
+    function updateEstimateBadge() {
+      const activeItem = state.queue[state.selectedIndex];
+      if (!activeItem || !activeItem.cutoutImg) return;
+
+      const dims = computeCompositionDimensions(activeItem, state.exportScale);
+      if (dom.estDimensions) {
+        dom.estDimensions.textContent = `${dims.width} × ${dims.height} px`;
+      }
+
+      clearTimeout(estDebounceTimer);
+      estDebounceTimer = setTimeout(() => {
+        const isPng = state.exportFormat === 'image/png';
+        const mime = isPng ? 'image/png' : 'image/jpeg';
+        const quality = isPng ? 1.0 : state.exportQuality;
+
+        const estCanvas = document.createElement('canvas');
+        drawCompositionToCanvas(estCanvas, activeItem, state.exportScale);
+        estCanvas.toBlob((blob) => {
+          if (blob && dom.estFileSize) {
+            dom.estFileSize.textContent = `~${formatBytes(blob.size)}`;
+          }
+        }, mime, quality);
+      }, 250);
+    }
+
+    // Seleccionar una imagen de la cola para visualizar y editar
+    function selectQueueItem(index, shouldRender = true) {
+      if (index < 0 || index >= state.queue.length) return;
+      const item = state.queue[index];
+      if (item.status !== 'done') return;
+
+      state.selectedIndex = index;
+
+      dom.currentFileNameText.textContent = item.name;
+      dom.originalSplitImg.src = item.originalUrl;
+      dom.inferenceTimeText.textContent = `${item.duration}s`;
+
+      renderQueueStrip();
+
+      // Sincronizar sliders con los ajustes del elemento seleccionado
+      const b = item.brightness ?? 100;
+      const c = item.contrast ?? 100;
+      const s = item.saturation ?? 100;
+      state.brightness = b;
+      state.contrast = c;
+      state.saturation = s;
+      if (dom.brightnessInput) dom.brightnessInput.value = b;
+      if (dom.brightnessVal) dom.brightnessVal.textContent = `${b}%`;
+      if (dom.contrastInput) dom.contrastInput.value = c;
+      if (dom.contrastVal) dom.contrastVal.textContent = `${c}%`;
+      if (dom.saturationInput) dom.saturationInput.value = s;
+      if (dom.saturationVal) dom.saturationVal.textContent = `${s}%`;
+
+      // Sombra
+      const shadowOn = item.shadowEnabled ?? false;
+      state.shadowEnabled = shadowOn;
+      if (dom.shadowToggle) dom.shadowToggle.checked = shadowOn;
+      if (dom.shadowBadge) {
+        dom.shadowBadge.textContent = shadowOn ? 'Activa' : 'Inactiva';
+        dom.shadowBadge.classList.toggle('active', shadowOn);
+      }
+      if (dom.shadowCard) dom.shadowCard.classList.toggle('active', shadowOn);
+      if (dom.shadowControlsWrap) dom.shadowControlsWrap.classList.toggle('hidden', !shadowOn);
+      if (dom.shadowBlurInput) dom.shadowBlurInput.value = item.shadowBlur ?? 25;
+      if (dom.shadowBlurVal) dom.shadowBlurVal.textContent = `${item.shadowBlur ?? 25}px`;
+      if (dom.shadowOffsetYInput) dom.shadowOffsetYInput.value = item.shadowOffsetY ?? 15;
+      if (dom.shadowOffsetYVal) dom.shadowOffsetYVal.textContent = `${item.shadowOffsetY ?? 15}px`;
+      if (dom.shadowOpacityInput) dom.shadowOpacityInput.value = item.shadowOpacity ?? 35;
+      if (dom.shadowOpacityVal) dom.shadowOpacityVal.textContent = `${item.shadowOpacity ?? 35}%`;
+      if (dom.shadowColorPicker) dom.shadowColorPicker.value = item.shadowColor ?? '#000000';
+      if (dom.shadowColorHex) dom.shadowColorHex.textContent = (item.shadowColor ?? '#000000').toUpperCase();
+
+      // Sticker
+      const stickerOn = item.stickerEnabled ?? false;
+      state.stickerEnabled = stickerOn;
+      if (dom.stickerToggle) dom.stickerToggle.checked = stickerOn;
+      if (dom.stickerBadge) {
+        dom.stickerBadge.textContent = stickerOn ? 'Activo' : 'Inactivo';
+        dom.stickerBadge.classList.toggle('active', stickerOn);
+      }
+      if (dom.stickerCard) dom.stickerCard.classList.toggle('active', stickerOn);
+      if (dom.stickerControlsWrap) dom.stickerControlsWrap.classList.toggle('hidden', !stickerOn);
+      if (dom.stickerWidthInput) dom.stickerWidthInput.value = item.stickerWidth ?? 12;
+      if (dom.stickerWidthVal) dom.stickerWidthVal.textContent = `${item.stickerWidth ?? 12}px`;
+      if (dom.stickerColorPicker) dom.stickerColorPicker.value = item.stickerColor ?? '#FFFFFF';
+      if (dom.stickerColorHex) dom.stickerColorHex.textContent = (item.stickerColor ?? '#FFFFFF').toUpperCase();
+
+      // Transformaciones
+      state.flipH = item.flipH ?? false;
+      state.flipV = item.flipV ?? false;
+      state.rotation = item.rotation ?? 0;
+      if (dom.flipHBtn) dom.flipHBtn.classList.toggle('active', state.flipH);
+      if (dom.flipVBtn) dom.flipVBtn.classList.toggle('active', state.flipV);
+
+      // Aspect Ratio
+      state.aspectRatio = item.aspectRatio ?? 'original';
+      if (dom.aspectPillBtns) {
+        dom.aspectPillBtns.forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.aspect === state.aspectRatio);
+        });
+      }
+
+      if (shouldRender) {
+        renderPreview();
+        updateSplitSlider(state.splitRatio);
+      }
+    }
+
+    // --- Renderizado en Canvas con Alta Resolución ---
+    function renderPreview() {
+      const activeItem = state.queue[state.selectedIndex];
+      if (!activeItem || !activeItem.cutoutImg) return;
+
+      drawCompositionToCanvas(dom.previewCanvas, activeItem, 1.0);
+
+      const dims = computeCompositionDimensions(activeItem, 1.0);
+      dom.imgDimensionsText.textContent = `${dims.width} × ${dims.height} px`;
+
+      updateEstimateBadge();
+    }
+
+    function drawCoverImage(ctx, img, targetW, targetH) {
+      const imgW = img.naturalWidth || img.width;
+      const imgH = img.naturalHeight || img.height;
+      const hRatio = targetW / imgW;
+      const vRatio = targetH / imgH;
+      const ratio = Math.max(hRatio, vRatio);
+      const centerShiftX = (targetW - imgW * ratio) / 2;
+      const centerShiftY = (targetH - imgH * ratio) / 2;
+      ctx.drawImage(img, 0, 0, imgW, imgH, centerShiftX, centerShiftY, imgW * ratio, imgH * ratio);
+    }
+
+    function applyGradientToContext(ctx, gradStr, w, h) {
+      if (gradStr.includes('radial-gradient')) {
+        const grad = ctx.createRadialGradient(w/2, h/2, 10, w/2, h/2, Math.max(w, h)/1.2);
+        grad.addColorStop(0, '#f8fafc');
+        grad.addColorStop(1, '#94a3b8');
+        ctx.fillStyle = grad;
+      } else {
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        if (gradStr.includes('#f6d365')) {
+          grad.addColorStop(0, '#f6d365');
+          grad.addColorStop(1, '#fda085');
+        } else if (gradStr.includes('#4facfe')) {
+          grad.addColorStop(0, '#4facfe');
+          grad.addColorStop(1, '#00f2fe');
+        } else if (gradStr.includes('#a18cd1')) {
+          grad.addColorStop(0, '#a18cd1');
+          grad.addColorStop(1, '#fbc2eb');
+        } else if (gradStr.includes('#0f172a')) {
+          grad.addColorStop(0, '#0f172a');
+          grad.addColorStop(1, '#1e1b4b');
+        } else if (gradStr.includes('#ff758c')) {
+          grad.addColorStop(0, '#ff758c');
+          grad.addColorStop(1, '#ff7eb3');
+        } else {
+          grad.addColorStop(0, '#6366f1');
+          grad.addColorStop(1, '#8b5cf6');
+        }
+        ctx.fillStyle = grad;
+      }
+    }
+
+    // --- Control del Comparador Antes / Después (Split Slider) ---
+    function updateSplitSlider(ratio) {
+      state.splitRatio = Math.max(0, Math.min(1, ratio));
+      const percent = state.splitRatio * 100;
+
+      dom.splitSliderLine.style.left = `${percent}%`;
+      dom.originalSplitLayer.style.clipPath = `polygon(0 0, ${percent}% 0, ${percent}% 100%, 0 100%)`;
+    }
+
+    function initSplitEvents() {
+      const stage = dom.viewerStage;
+
+      function onMove(e) {
+        if (!state.isDraggingSplit) return;
+        const rect = stage.getBoundingClientRect();
+        const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
+        if (clientX === undefined) return;
+        const offsetX = clientX - rect.left;
+        const ratio = offsetX / rect.width;
+        updateSplitSlider(ratio);
+      }
+
+      function onUp() {
+        state.isDraggingSplit = false;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('touchmove', onMove);
+        window.removeEventListener('touchend', onUp);
+      }
+
+      dom.splitSliderLine.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        state.isDraggingSplit = true;
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      });
+
+      dom.splitSliderLine.addEventListener('touchstart', (e) => {
+        state.isDraggingSplit = true;
+        window.addEventListener('touchmove', onMove, { passive: true });
+        window.addEventListener('touchend', onUp);
+      }, { passive: true });
+
+      stage.addEventListener('click', (e) => {
+        if (e.target.closest('.viewer-toolbar') || state.isDraggingSplit) return;
+        const rect = stage.getBoundingClientRect();
+        const ratio = (e.clientX - rect.left) / rect.width;
+        updateSplitSlider(ratio);
+      });
+
+      dom.tabSplitView.addEventListener('click', () => {
+        state.viewMode = 'split';
+        dom.tabSplitView.classList.add('active');
+        dom.tabFinalOnly.classList.remove('active');
+        dom.originalSplitLayer.style.display = 'flex';
+        dom.splitSliderLine.style.display = 'flex';
+        dom.badgeBefore.style.display = 'block';
+        dom.badgeAfter.style.display = 'block';
+        updateSplitSlider(0.5);
+      });
+
+      dom.tabFinalOnly.addEventListener('click', () => {
+        state.viewMode = 'final';
+        dom.tabFinalOnly.classList.add('active');
+        dom.tabSplitView.classList.remove('active');
+        dom.originalSplitLayer.style.display = 'none';
+        dom.splitSliderLine.style.display = 'none';
+        dom.badgeBefore.style.display = 'none';
+        dom.badgeAfter.style.display = 'none';
+      });
+
+      let isShowingOriginal = false;
+      dom.quickToggleOriginalBtn.addEventListener('click', () => {
+        isShowingOriginal = !isShowingOriginal;
+        if (isShowingOriginal) {
+          updateSplitSlider(1.0);
+          dom.quickToggleOriginalBtn.querySelector('span').textContent = 'Ver Recorte';
+        } else {
+          updateSplitSlider(0.0);
+          dom.quickToggleOriginalBtn.querySelector('span').textContent = 'Ver Original';
+        }
+      });
+
+      dom.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.25));
+      dom.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.25));
+      dom.zoomResetBtn.addEventListener('click', () => setZoom(1.0));
+    }
+
+    function setZoom(val) {
+      state.zoom = Math.max(0.5, Math.min(3.0, val));
+      dom.zoomWrapper.style.transform = `scale(${state.zoom})`;
+      dom.zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
+    }
+
+    // --- Controles de Fondo y Paleta ---
+    function initBackgroundControls() {
+      dom.bgTypeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          dom.bgTypeBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const type = btn.dataset.bgType;
+          state.bgType = type;
+
+          dom.bgPanelTransparent.classList.add('hidden');
+          dom.bgPanelColor.classList.add('hidden');
+          dom.bgPanelGradient.classList.add('hidden');
+          dom.bgPanelImage.classList.add('hidden');
+
+          if (type === 'transparent') dom.bgPanelTransparent.classList.remove('hidden');
+          if (type === 'color') dom.bgPanelColor.classList.remove('hidden');
+          if (type === 'gradient') dom.bgPanelGradient.classList.remove('hidden');
+          if (type === 'image') dom.bgPanelImage.classList.remove('hidden');
+
+          renderPreview();
+        });
+      });
+
+      dom.colorSwatches.forEach(swatch => {
+        swatch.addEventListener('click', () => {
+          dom.colorSwatches.forEach(s => s.classList.remove('active'));
+          swatch.classList.add('active');
+          state.solidColor = swatch.dataset.color;
+          dom.customColorPicker.value = state.solidColor;
+          dom.customColorHex.textContent = state.solidColor.toUpperCase();
+          renderPreview();
+        });
+      });
+
+      dom.customColorPicker.addEventListener('input', (e) => {
+        state.solidColor = e.target.value;
+        dom.customColorHex.textContent = state.solidColor.toUpperCase();
+        dom.colorSwatches.forEach(s => s.classList.remove('active'));
+        renderPreview();
+      });
+
+      dom.gradientSwatches.forEach(swatch => {
+        swatch.addEventListener('click', () => {
+          dom.gradientSwatches.forEach(s => s.classList.remove('active'));
+          swatch.classList.add('active');
+          state.gradientStr = swatch.dataset.gradient;
+          renderPreview();
+        });
+      });
+
+      dom.customBgDropzone.addEventListener('click', () => dom.customBgFileInput.click());
+      dom.customBgFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+          showToast('Selecciona un archivo de imagen válido', 'error');
+          return;
+        }
+
+        if (state.customBgUrl) URL.revokeObjectURL(state.customBgUrl);
+        state.customBgUrl = URL.createObjectURL(file);
+        state.customBgImg = await loadImageElement(state.customBgUrl);
+
+        dom.customBgThumb.src = state.customBgUrl;
+        dom.customBgPreviewRow.style.display = 'flex';
+        dom.customBgDropzone.style.display = 'none';
+
+        renderPreview();
+        showToast('Fondo personalizado cargado', 'info');
+      });
+
+      dom.removeCustomBgBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.customBgUrl) URL.revokeObjectURL(state.customBgUrl);
+        state.customBgUrl = null;
+        state.customBgImg = null;
+        dom.customBgFileInput.value = '';
+        dom.customBgPreviewRow.style.display = 'none';
+        dom.customBgDropzone.style.display = 'block';
+        renderPreview();
+      });
+
+      dom.bgBlurInput.addEventListener('input', (e) => {
+        state.bgBlur = parseInt(e.target.value, 10);
+        dom.blurVal.textContent = `${state.bgBlur}px`;
+        renderPreview();
+      });
+    }
+
+    // --- Controles de Ajustes de Imagen (Brillo, Contraste, Saturación) ---
+    function initAdjustmentControls() {
+      if (!dom.brightnessInput) return;
+
+      dom.brightnessInput.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        state.brightness = val;
+        dom.brightnessVal.textContent = `${val}%`;
+        const activeItem = state.queue[state.selectedIndex];
+        if (activeItem) activeItem.brightness = val;
+        renderPreview();
+      });
+
+      dom.contrastInput.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        state.contrast = val;
+        dom.contrastVal.textContent = `${val}%`;
+        const activeItem = state.queue[state.selectedIndex];
+        if (activeItem) activeItem.contrast = val;
+        renderPreview();
+      });
+
+      dom.saturationInput.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        state.saturation = val;
+        dom.saturationVal.textContent = `${val}%`;
+        const activeItem = state.queue[state.selectedIndex];
+        if (activeItem) activeItem.saturation = val;
+        renderPreview();
+      });
+
+      dom.resetAdjustmentsBtn.addEventListener('click', () => {
+        state.brightness = 100;
+        state.contrast = 100;
+        state.saturation = 100;
+
+        dom.brightnessInput.value = 100;
+        dom.brightnessVal.textContent = '100%';
+        dom.contrastInput.value = 100;
+        dom.contrastVal.textContent = '100%';
+        dom.saturationInput.value = 100;
+        dom.saturationVal.textContent = '100%';
+
+        const activeItem = state.queue[state.selectedIndex];
+        if (activeItem) {
+          activeItem.brightness = 100;
+          activeItem.contrast = 100;
+          activeItem.saturation = 100;
+        }
+
+        renderPreview();
+        showToast('Ajustes de imagen restablecidos', 'info', 1500);
+      });
+    }
+
+    // --- Exportación Individual y por Lotes (ZIP) ---
+    function initExportControls() {
+      dom.formatPngBtn.addEventListener('click', () => {
+        state.exportFormat = 'image/png';
+        dom.formatPngBtn.classList.add('active');
+        dom.formatJpgBtn.classList.remove('active');
+        dom.jpgQualityRow.classList.add('hidden');
+        updateEstimateBadge();
+      });
+
+      dom.formatJpgBtn.addEventListener('click', () => {
+        state.exportFormat = 'image/jpeg';
+        dom.formatJpgBtn.classList.add('active');
+        dom.formatPngBtn.classList.remove('active');
+        dom.jpgQualityRow.classList.remove('hidden');
+        updateEstimateBadge();
+      });
+
+      dom.jpgQualityInput.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        state.exportQuality = val / 100;
+        dom.jpgQualityVal.textContent = `${val}%`;
+        updateEstimateBadge();
+      });
+
+      // Escala de resolución de exportación (100%, 75%, 50%)
+      if (dom.scalePillBtns) {
+        dom.scalePillBtns.forEach(btn => {
+          btn.addEventListener('click', () => {
+            dom.scalePillBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.exportScale = parseFloat(btn.dataset.scale);
+            const scaleLabels = { '1': '100% (Original)', '0.75': '75% (HD)', '0.5': '50% (Web)' };
+            if (dom.exportScaleVal) {
+              dom.exportScaleVal.textContent = scaleLabels[btn.dataset.scale] || `${Math.round(state.exportScale * 100)}%`;
+            }
+            updateEstimateBadge();
+          });
+        });
+      }
+
+      // Descargar Imagen Actual con Escala, Efectos y Fondo
+      dom.downloadBtn.addEventListener('click', () => {
+        const activeItem = state.queue[state.selectedIndex];
+        if (!activeItem || !activeItem.cutoutImg) return;
+
+        const isPng = state.exportFormat === 'image/png';
+        const mimeType = isPng ? 'image/png' : 'image/jpeg';
+        const quality = isPng ? 1.0 : state.exportQuality;
+
+        const exportCanvas = document.createElement('canvas');
+        drawCompositionToCanvas(exportCanvas, activeItem, state.exportScale);
+
+        exportCanvas.toBlob((blob) => {
+          if (!blob) {
+            showToast('Error al exportar la imagen', 'error');
+            return;
+          }
+          const baseName = activeItem.name.replace(/\.[^/.]+$/, "");
+          const ext = isPng ? 'png' : 'jpg';
+          const scaleSuffix = state.exportScale < 1.0 ? `@${Math.round(state.exportScale * 100)}` : '';
+          triggerDownload(blob, `${baseName}-clearcut${scaleSuffix}.${ext}`);
+          showToast(`Descargado ${ext.toUpperCase()} (${formatBytes(blob.size)})`, 'success');
+        }, mimeType, quality);
+      });
+
+      // Copiar al Portapapeles (PNG con composición de efectos)
+      dom.copyClipboardBtn.addEventListener('click', async () => {
+        const activeItem = state.queue[state.selectedIndex];
+        if (!activeItem || !activeItem.cutoutImg) return;
+
+        try {
+          if (!navigator.clipboard || !window.ClipboardItem) {
+            throw new Error('Tu navegador no permite escribir imágenes al portapapeles');
+          }
+
+          const copyCanvas = document.createElement('canvas');
+          drawCompositionToCanvas(copyCanvas, activeItem, 1.0);
+
+          copyCanvas.toBlob(async (blob) => {
+            if (!blob) return;
+            try {
+              const item = new ClipboardItem({ 'image/png': blob });
+              await navigator.clipboard.write([item]);
+              showToast('¡Imagen copiada al portapapeles!', 'success');
+            } catch (err) {
+              console.error(err);
+              showToast('Permiso denegado para escribir en el portapapeles', 'error');
+            }
+          }, 'image/png');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+
+      // DESCARGA POR LOTES EN ZIP
+      dom.batchDownloadZipBtn.addEventListener('click', async () => {
+        const completedItems = state.queue.filter(i => i.status === 'done');
+        if (completedItems.length === 0) {
+          showToast('No hay imágenes terminadas para descargar', 'error');
+          return;
+        }
+
+        if (typeof window.JSZip === 'undefined') {
+          showToast('Empaquetador ZIP no disponible, descargando una a una...', 'info');
+          for (const item of completedItems) {
+            const b = await renderItemToBlob(item, state.exportFormat, state.exportFormat === 'image/png' ? 1.0 : state.exportQuality);
+            triggerDownload(b, `${item.name.replace(/\.[^/.]+$/, "")}-clearcut.png`);
+            await new Promise(r => setTimeout(r, 400));
+          }
+          return;
+        }
+
+        showToast(`Comprimiendo ${completedItems.length} imágenes en ZIP...`, 'info', 2500);
+
+        const zip = new window.JSZip();
+        const isPng = state.exportFormat === 'image/png';
+        const mimeType = isPng ? 'image/png' : 'image/jpeg';
+        const ext = isPng ? 'png' : 'jpg';
+
+        for (let i = 0; i < completedItems.length; i++) {
+          const item = completedItems[i];
+          const baseName = item.name.replace(/\.[^/.]+$/, "");
+          
+          const blob = await renderItemToBlob(item, mimeType, isPng ? 1.0 : state.exportQuality);
+          zip.file(`${baseName}-clearcut.${ext}`, blob);
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        triggerDownload(zipBlob, `clearcut-lote-${Date.now()}.zip`);
+        showToast('¡Archivo ZIP descargado con éxito!', 'success');
+      });
+    }
+
+    async function renderItemToBlob(item, mimeType, quality) {
+      const tempCanvas = document.createElement('canvas');
+      drawCompositionToCanvas(tempCanvas, item, state.exportScale);
+      return new Promise(resolve => tempCanvas.toBlob(resolve, mimeType, quality));
+    }
+
+    // --- Controles de Efectos Pro (Sombra, Contorno) y Transformaciones ---
+    function initProControls() {
+      // 1. Sombra Suave 3D
+      if (dom.shadowToggle) {
+        dom.shadowToggle.addEventListener('change', () => {
+          const on = dom.shadowToggle.checked;
+          state.shadowEnabled = on;
+          dom.shadowBadge.textContent = on ? 'Activa' : 'Inactiva';
+          dom.shadowBadge.classList.toggle('active', on);
+          dom.shadowCard.classList.toggle('active', on);
+          dom.shadowControlsWrap.classList.toggle('hidden', !on);
+
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.shadowEnabled = on;
+          renderPreview();
+        });
+      }
+
+      if (dom.shadowBlurInput) {
+        dom.shadowBlurInput.addEventListener('input', (e) => {
+          const val = parseInt(e.target.value, 10);
+          state.shadowBlur = val;
+          dom.shadowBlurVal.textContent = `${val}px`;
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.shadowBlur = val;
+          renderPreview();
+        });
+      }
+
+      if (dom.shadowOffsetYInput) {
+        dom.shadowOffsetYInput.addEventListener('input', (e) => {
+          const val = parseInt(e.target.value, 10);
+          state.shadowOffsetY = val;
+          dom.shadowOffsetYVal.textContent = `${val}px`;
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.shadowOffsetY = val;
+          renderPreview();
+        });
+      }
+
+      if (dom.shadowOpacityInput) {
+        dom.shadowOpacityInput.addEventListener('input', (e) => {
+          const val = parseInt(e.target.value, 10);
+          state.shadowOpacity = val;
+          dom.shadowOpacityVal.textContent = `${val}%`;
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.shadowOpacity = val;
+          renderPreview();
+        });
+      }
+
+      if (dom.shadowColorPicker) {
+        dom.shadowColorPicker.addEventListener('input', (e) => {
+          state.shadowColor = e.target.value;
+          dom.shadowColorHex.textContent = state.shadowColor.toUpperCase();
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.shadowColor = state.shadowColor;
+          renderPreview();
+        });
+      }
+
+      // 2. Borde Pegatina / Sticker
+      if (dom.stickerToggle) {
+        dom.stickerToggle.addEventListener('change', () => {
+          const on = dom.stickerToggle.checked;
+          state.stickerEnabled = on;
+          dom.stickerBadge.textContent = on ? 'Activo' : 'Inactivo';
+          dom.stickerBadge.classList.toggle('active', on);
+          dom.stickerCard.classList.toggle('active', on);
+          dom.stickerControlsWrap.classList.toggle('hidden', !on);
+
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.stickerEnabled = on;
+          renderPreview();
+        });
+      }
+
+      if (dom.stickerWidthInput) {
+        dom.stickerWidthInput.addEventListener('input', (e) => {
+          const val = parseInt(e.target.value, 10);
+          state.stickerWidth = val;
+          dom.stickerWidthVal.textContent = `${val}px`;
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.stickerWidth = val;
+          renderPreview();
+        });
+      }
+
+      if (dom.stickerColorPicker) {
+        dom.stickerColorPicker.addEventListener('input', (e) => {
+          state.stickerColor = e.target.value;
+          dom.stickerColorHex.textContent = state.stickerColor.toUpperCase();
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.stickerColor = state.stickerColor;
+          renderPreview();
+        });
+      }
+
+      if (dom.resetEffectsBtn) {
+        dom.resetEffectsBtn.addEventListener('click', () => {
+          state.shadowEnabled = false;
+          state.stickerEnabled = false;
+          if (dom.shadowToggle) dom.shadowToggle.checked = false;
+          if (dom.shadowBadge) {
+            dom.shadowBadge.textContent = 'Inactiva';
+            dom.shadowBadge.classList.remove('active');
+          }
+          if (dom.shadowCard) dom.shadowCard.classList.remove('active');
+          if (dom.shadowControlsWrap) dom.shadowControlsWrap.classList.add('hidden');
+
+          if (dom.stickerToggle) dom.stickerToggle.checked = false;
+          if (dom.stickerBadge) {
+            dom.stickerBadge.textContent = 'Inactivo';
+            dom.stickerBadge.classList.remove('active');
+          }
+          if (dom.stickerCard) dom.stickerCard.classList.remove('active');
+          if (dom.stickerControlsWrap) dom.stickerControlsWrap.classList.add('hidden');
+
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) {
+            activeItem.shadowEnabled = false;
+            activeItem.stickerEnabled = false;
+          }
+          renderPreview();
+          showToast('Efectos visuales restablecidos', 'info', 1500);
+        });
+      }
+
+      // 3. Transformaciones (Volteo H, Volteo V, Giro 90°)
+      if (dom.flipHBtn) {
+        dom.flipHBtn.addEventListener('click', () => {
+          state.flipH = !state.flipH;
+          dom.flipHBtn.classList.toggle('active', state.flipH);
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.flipH = state.flipH;
+          renderPreview();
+        });
+      }
+
+      if (dom.flipVBtn) {
+        dom.flipVBtn.addEventListener('click', () => {
+          state.flipV = !state.flipV;
+          dom.flipVBtn.classList.toggle('active', state.flipV);
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.flipV = state.flipV;
+          renderPreview();
+        });
+      }
+
+      if (dom.rotateBtn) {
+        dom.rotateBtn.addEventListener('click', () => {
+          state.rotation = (state.rotation + 90) % 360;
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) activeItem.rotation = state.rotation;
+          renderPreview();
+          showToast(`Rotación: ${state.rotation}°`, 'info', 1200);
+        });
+      }
+
+      if (dom.resetTransformBtn) {
+        dom.resetTransformBtn.addEventListener('click', () => {
+          state.flipH = false;
+          state.flipV = false;
+          state.rotation = 0;
+          state.aspectRatio = 'original';
+
+          if (dom.flipHBtn) dom.flipHBtn.classList.remove('active');
+          if (dom.flipVBtn) dom.flipVBtn.classList.remove('active');
+          if (dom.aspectPillBtns) {
+            dom.aspectPillBtns.forEach(btn => {
+              btn.classList.toggle('active', btn.dataset.aspect === 'original');
+            });
+          }
+
+          const activeItem = state.queue[state.selectedIndex];
+          if (activeItem) {
+            activeItem.flipH = false;
+            activeItem.flipV = false;
+            activeItem.rotation = 0;
+            activeItem.aspectRatio = 'original';
+          }
+          renderPreview();
+          showToast('Transformación y lienzo restablecidos', 'info', 1500);
+        });
+      }
+
+      // 4. Presets de Lienzo (Aspect Ratio)
+      if (dom.aspectPillBtns) {
+        dom.aspectPillBtns.forEach(btn => {
+          btn.addEventListener('click', () => {
+            dom.aspectPillBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.aspectRatio = btn.dataset.aspect;
+            const activeItem = state.queue[state.selectedIndex];
+            if (activeItem) activeItem.aspectRatio = state.aspectRatio;
+            renderPreview();
+          });
+        });
+      }
+
+      // 5. Propagación de Ajustes a Todo el Lote
+      if (dom.applyToAllBatchBtn) {
+        dom.applyToAllBatchBtn.addEventListener('click', () => {
+          if (state.queue.length === 0) return;
+          state.queue.forEach(item => {
+            item.brightness = state.brightness;
+            item.contrast = state.contrast;
+            item.saturation = state.saturation;
+            item.shadowEnabled = state.shadowEnabled;
+            item.shadowBlur = state.shadowBlur;
+            item.shadowOffsetY = state.shadowOffsetY;
+            item.shadowOpacity = state.shadowOpacity;
+            item.shadowColor = state.shadowColor;
+            item.stickerEnabled = state.stickerEnabled;
+            item.stickerWidth = state.stickerWidth;
+            item.stickerColor = state.stickerColor;
+            item.flipH = state.flipH;
+            item.flipV = state.flipV;
+            item.rotation = state.rotation;
+            item.aspectRatio = state.aspectRatio;
+          });
+          renderPreview();
+          showToast(`¡Ajustes aplicados a las ${state.queue.length} imágenes del lote!`, 'success', 3000);
+        });
+      }
+
+      // 6. Modal de Atajos de Teclado
+      if (dom.shortcutsModalBtn && dom.shortcutsModal) {
+        dom.shortcutsModalBtn.addEventListener('click', () => {
+          dom.shortcutsModal.classList.remove('hidden');
+        });
+      }
+
+      if (dom.closeShortcutsBtn && dom.shortcutsModal) {
+        dom.closeShortcutsBtn.addEventListener('click', () => {
+          dom.shortcutsModal.classList.add('hidden');
+        });
+      }
+
+      if (dom.shortcutsModal) {
+        dom.shortcutsModal.addEventListener('click', (e) => {
+          if (e.target === dom.shortcutsModal) {
+            dom.shortcutsModal.classList.add('hidden');
+          }
+        });
+      }
+
+      // 7. Atajos Globales de Teclado
+      window.addEventListener('keydown', (e) => {
+        // Ignorar si el usuario está escribiendo en un input
+        if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+
+        // Escape: cerrar modal
+        if (e.key === 'Escape' && dom.shortcutsModal && !dom.shortcutsModal.classList.contains('hidden')) {
+          dom.shortcutsModal.classList.add('hidden');
+          return;
+        }
+
+        // ?: Mostrar modal de atajos
+        if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+          e.preventDefault();
+          if (dom.shortcutsModal) {
+            dom.shortcutsModal.classList.toggle('hidden');
+          }
+          return;
+        }
+
+        // Solo ejecutar atajos del editor si el editor está visible
+        if (dom.editorSection && dom.editorSection.style.display === 'none') return;
+        const activeItem = state.queue[state.selectedIndex];
+        if (!activeItem || !activeItem.cutoutImg) return;
+
+        // Ctrl+D o Cmd+S: Descargar
+        if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'd' || e.key.toLowerCase() === 's')) {
+          e.preventDefault();
+          dom.downloadBtn.click();
+          return;
+        }
+
+        // Ctrl+C o Cmd+C: Copiar
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+          // Si no hay texto seleccionado en la página, copiar la imagen
+          if (!window.getSelection()?.toString()) {
+            e.preventDefault();
+            dom.copyClipboardBtn.click();
+            return;
+          }
+        }
+
+        // Espacio: Alternar Ver Original / Recorte
+        if (e.code === 'Space') {
+          e.preventDefault();
+          dom.quickToggleOriginalBtn.click();
+          return;
+        }
+
+        // H: Voltear horizontal
+        if (e.key.toLowerCase() === 'h') {
+          dom.flipHBtn.click();
+          return;
+        }
+
+        // V: Voltear vertical
+        if (e.key.toLowerCase() === 'v') {
+          dom.flipVBtn.click();
+          return;
+        }
+
+        // R: Rotar 90°
+        if (e.key.toLowerCase() === 'r') {
+          dom.rotateBtn.click();
+          return;
+        }
+
+        // + o =: Zoom in
+        if (e.key === '+' || e.key === '=') {
+          e.preventDefault();
+          dom.zoomInBtn.click();
+          return;
+        }
+
+        // -: Zoom out
+        if (e.key === '-') {
+          e.preventDefault();
+          dom.zoomOutBtn.click();
+          return;
+        }
+
+        // 0: Reset Zoom
+        if (e.key === '0') {
+          e.preventDefault();
+          dom.zoomResetBtn.click();
+          return;
+        }
+      });
+    }
+
+    function triggerDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // --- Gestión de Archivos y Eventos de Cola / Dropzone ---
+    function initDropzone() {
+      const dropzone = dom.dropzone;
+      const fileInput = dom.fileInput;
+      const browseBtn = dom.browseBtn;
+
+      browseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+      });
+
+      dropzone.addEventListener('click', () => fileInput.click());
+
+      ['dragenter', 'dragover'].forEach(name => {
+        dropzone.addEventListener(name, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(name => {
+        dropzone.addEventListener(name, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('dragover');
+        });
+      });
+
+      dropzone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+          addFilesToQueue(files);
+        }
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+          addFilesToQueue(files);
+        }
+        fileInput.value = '';
+      });
+
+      // Añadir más fotos desde el Editor
+      dom.addMoreFilesBtn.addEventListener('click', () => dom.addMoreFileInput.click());
+      dom.addMoreFileInput.addEventListener('change', (e) => {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+          addFilesToQueue(files);
+        }
+        dom.addMoreFileInput.value = '';
+      });
+
+      // Detener cola
+      dom.cancelQueueBtn.addEventListener('click', () => {
+        state.cancelRequested = true;
+        showToast('Cancelando cola restante...', 'info');
+      });
+
+      // Pegar desde Portapapeles (Ctrl+V)
+      window.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const pastedFiles = [];
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            const blob = items[i].getAsFile();
+            if (blob) pastedFiles.push(blob);
+          }
+        }
+
+        if (pastedFiles.length > 0) {
+          showToast(`Pegadas ${pastedFiles.length} imagen(es) desde el portapapeles`, 'info');
+          addFilesToQueue(pastedFiles);
+        }
+      });
+
+      // Muestras interactivas individuales
+      document.querySelectorAll('.sample-btn:not(#sampleBatchBtn)').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const sampleType = btn.dataset.sample;
+          let blob;
+          if (sampleType === 'ghost') {
+            const res = await fetch('/assets/aistudio/icono_81a3db5b.png');
+            blob = await res.blob();
+            blob.name = 'un_fantasma_en_el_sistema.png';
+          } else {
+            const res = await fetch(createSampleImageDataUrl(sampleType));
+            blob = await res.blob();
+            blob.name = `muestra_${sampleType}.png`;
+          }
+          addFilesToQueue([blob]);
+        });
+      });
+
+      // Muestra interactiva de Lote Completo (4 fotos para probar la cola)
+      dom.sampleBatchBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const batchBlobs = [];
+        
+        // Incluir el logo oficial del fantasma como primera muestra
+        try {
+          const ghostRes = await fetch('/assets/aistudio/icono_81a3db5b.png');
+          const ghostBlob = await ghostRes.blob();
+          ghostBlob.name = '1_logo_fantasma.png';
+          batchBlobs.push(ghostBlob);
+        } catch (err) {
+          console.warn('No se pudo cargar el logo como muestra:', err);
+        }
+
+        const types = ['portrait', 'product', 'cat'];
+        for (let i = 0; i < types.length; i++) {
+          const t = types[i];
+          const blob = await fetch(createSampleImageDataUrl(t)).then(r => r.blob());
+          blob.name = `${i + 2}_lote_demo_${t}.png`;
+          batchBlobs.push(blob);
+        }
+        addFilesToQueue(batchBlobs);
+      });
+
+      // Reiniciar y volver a la zona de subida
+      dom.resetBtn.addEventListener('click', () => {
+        clearEntireQueue();
+        dom.editorSection.style.display = 'none';
+        dom.batchProgressSection.style.display = 'none';
+        dom.uploadSection.style.display = 'block';
+        setZoom(1.0);
+        renderHistoryUI();
+      });
+
+      // Ver historial desde el editor
+      if (dom.viewHistoryFromEditorBtn) {
+        dom.viewHistoryFromEditorBtn.addEventListener('click', () => {
+          dom.editorSection.style.display = 'none';
+          dom.batchProgressSection.style.display = 'none';
+          dom.uploadSection.style.display = 'block';
+          renderHistoryUI();
+        });
+      }
+
+      // Limpiar historial completo
+      if (dom.clearHistoryBtn) {
+        dom.clearHistoryBtn.addEventListener('click', clearAllHistory);
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function loadImageElement(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Fallo al cargar imagen'));
+        img.src = src;
+      });
+    }
+
+    function createSampleImageDataUrl(type) {
+      let svgContent = '';
+      if (type === 'portrait') {
+        svgContent = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+            <defs>
+              <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#4f46e5" />
+                <stop offset="100%" stop-color="#06b6d4" />
+              </linearGradient>
+            </defs>
+            <rect width="800" height="800" fill="url(#bgGrad)" />
+            <circle cx="400" cy="330" r="140" fill="#fed7aa" />
+            <path d="M 240 330 C 240 180 560 180 560 330 C 560 210 240 210 240 330 Z" fill="#3b0764" />
+            <ellipse cx="350" cy="320" rx="12" ry="8" fill="#1e293b" />
+            <ellipse cx="450" cy="320" rx="12" ry="8" fill="#1e293b" />
+            <path d="M 360 380 Q 400 420 440 380" stroke="#b91c1c" stroke-width="8" fill="none" stroke-linecap="round" />
+            <path d="M 220 720 C 220 500 580 500 580 720 Z" fill="#0f172a" />
+            <polygon points="360,510 400,560 440,510" fill="#fed7aa" />
+          </svg>
+        `;
+      } else if (type === 'product') {
+        svgContent = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+            <rect width="800" height="800" fill="#f1f5f9" />
+            <path d="M 180 520 C 280 530 520 530 640 490 C 620 550 260 550 180 520 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="4" />
+            <path d="M 180 520 C 200 420 340 320 480 340 C 530 350 620 420 640 490 C 520 530 280 530 180 520 Z" fill="#ea580c" />
+            <path d="M 320 350 L 400 430 M 350 340 L 430 420 M 380 330 L 460 410" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+            <circle cx="280" cy="440" r="30" fill="#fed7aa" />
+          </svg>
+        `;
+      } else {
+        svgContent = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+            <rect width="800" height="800" fill="#ec4899" />
+            <circle cx="400" cy="420" r="160" fill="#ffffff" />
+            <polygon points="270,320 310,180 390,290" fill="#ffffff" stroke="#fbcfe8" stroke-width="12" />
+            <polygon points="530,320 490,180 410,290" fill="#ffffff" stroke="#fbcfe8" stroke-width="12" />
+            <ellipse cx="340" cy="390" rx="20" ry="28" fill="#10b981" />
+            <ellipse cx="460" cy="390" rx="20" ry="28" fill="#10b981" />
+            <polygon points="390,440 410,440 400,455" fill="#f43f5e" />
+            <line x1="280" y1="440" x2="360" y2="445" stroke="#94a3b8" stroke-width="4" />
+            <line x1="270" y1="465" x2="360" y2="455" stroke="#94a3b8" stroke-width="4" />
+            <line x1="520" y1="440" x2="440" y2="445" stroke="#94a3b8" stroke-width="4" />
+            <line x1="530" y1="465" x2="440" y2="455" stroke="#94a3b8" stroke-width="4" />
+          </svg>
+        `;
+      }
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgContent.trim());
+    }
+
+    // --- Arranque de la Aplicación ---
+    window.addEventListener('DOMContentLoaded', () => {
+      checkBrowserCompatibility();
+      initTheme();
+      initDropzone();
+      initSplitEvents();
+      initBackgroundControls();
+      initAdjustmentControls();
+      initProControls();
+      initExportControls();
+      renderHistoryUI();
+    });
+  </script>
+</body>
+</html>
